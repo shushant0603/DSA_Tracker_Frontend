@@ -107,11 +107,34 @@ const AddQuestion = () => {
       }
 
       const submitData = {
-        ...formData,
-        timeSpent: formData.timeSpent ? parseInt(formData.timeSpent) : undefined,
-        rating: formData.rating ? parseInt(formData.rating) : undefined,
+        title: formData.title,
+        link: formData.link,
+        platform: formData.platform,
+        topic: formData.topic,
+        difficulty: formData.difficulty,
         revisionSchedule: revisionScheduleData,
       };
+      
+      // Only add optional fields if they have values
+      if (formData.description && formData.description.trim()) {
+        submitData.description = formData.description.trim();
+      }
+      if (formData.notes && formData.notes.trim()) {
+        submitData.notes = formData.notes.trim();
+      }
+      if (formData.tags && formData.tags.length > 0) {
+        submitData.tags = formData.tags;
+      }
+      if (formData.timeSpent && parseInt(formData.timeSpent) > 0) {
+        submitData.timeSpent = parseInt(formData.timeSpent);
+      }
+      if (formData.rating && parseInt(formData.rating) >= 1) {
+        submitData.rating = parseInt(formData.rating);
+      }
+      
+      // Debug: Log what we're sending
+      console.log('Submitting data:', JSON.stringify(submitData, null, 2));
+      
      // Send the data to the backend and log the response
      const response = await api.post('/questions', submitData);
      console.log('Backend Response:', response.data); // Log the backend response
@@ -119,8 +142,17 @@ const AddQuestion = () => {
       toast.success('Question added successfully!');
       navigate('/app/questions');
     } catch (error)      {
-      toast.error(error.response?.data?.message || 'Failed to add question');
+      // Better error logging
       console.error('Error adding question:', error);
+      console.error('Error response:', error.response?.data);
+      
+      // Show specific validation errors
+      if (error.response?.data?.errors) {
+        const errorMessages = error.response.data.errors.map(e => e.msg || e.message).join(', ');
+        toast.error(errorMessages);
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to add question');
+      }
     } finally {
       setLoading(false);
     }
