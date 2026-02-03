@@ -1,12 +1,44 @@
-# React + Vite
+DSA Tracker – Frontend
+Frontend for DSA Tracker Application built using React + Vite + Tailwind CSS.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Tracks DSA questions, revision progress, platform stats and provides a clean dashboard for interview prep.
 
-Currently, two official plugins are available:
+Tech Stack
+React
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Vite
 
-## Expanding the ESLint configuration
+Tailwind CSS
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+React Router
+
+Axios
+
+Recharts
+
+Features
+Authentication with OTP
+
+Dashboard with stats & charts
+
+Add / Edit / Delete DSA questions
+
+Revision tracking
+
+Dark / Light mode
+
+Platform stats (LeetCode, Codeforces)
+
+Code playground
+
+Setup
+cd frontend
+npm install
+npm run dev
+Runs on: http://localhost:5173
+
+Backend: http://localhost:3000
+
+Build
+npm run build
+npm run preview
