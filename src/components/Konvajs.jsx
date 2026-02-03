@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { Stage, Layer, Circle, Star, Line, Text } from "react-konva";
-import { Howl } from "howler";
+// import { Howl } from "howler";
 import { gsap } from "gsap";
 
 // Sounds
-const clickSound = new Howl({ src: ["/sounds/click.mp3"], volume: 0.5 });
-const bfsSound = new Howl({ src: ["/sounds/bfs.mp3"], volume: 0.5 });
-const dfsSound = new Howl({ src: ["/sounds/dfs.mp3"], volume: 0.5 });
+// const clickSound = new Howl({ src: ["/sounds/click.mp3"], volume: 0.5 });
+// const bfsSound = new Howl({ src: ["/sounds/bfs.mp3"], volume: 0.5 });
+// const dfsSound = new Howl({ src: ["/sounds/dfs.mp3"], volume: 0.5 });
 
 export default function DSAGamePlayground() {
   const [nodes, setNodes] = useState([]);
@@ -24,7 +24,7 @@ export default function DSAGamePlayground() {
       shape: Math.random() > 0.5 ? "circle" : "star",
     };
     setNodes([...nodes, newNode]);
-    clickSound.play();
+    // clickSound.play();
     // Particle burst
   };
 
