@@ -11,6 +11,7 @@ import AddQuestion from './pages/AddQuestion';
 import QuestionsList from './pages/QuestionsList';
 import Revision from './pages/Revision';
 import Profile from './pages/Profile';
+import CodePlayground from './pages/CodePlayground';
 import HomeRoute from './pages/HomeRoute';
 
 const ProtectedRoute = ({ children }) => {
@@ -53,7 +54,7 @@ function App() {
         >
           <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
             <Toaster
-              position="top-right"
+              position="top-center"
               toastOptions={{
                 duration: 4000,
                 style: {
@@ -79,6 +80,15 @@ function App() {
                   <PublicRoute>
                     <Register />
                   </PublicRoute>
+                }
+              />
+              {/* Playground - Separate full-screen route (outside Layout) */}
+              <Route
+                path="/app/playground"
+                element={
+                  <ProtectedRoute>
+                    <CodePlayground />
+                  </ProtectedRoute>
                 }
               />
               <Route
