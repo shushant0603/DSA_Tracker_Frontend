@@ -41,12 +41,18 @@ const Login = () => {
     setIsLoading(true);
     const result = await login(formData.email, formData.password);
     setIsLoading(false);
+    
     if (result.success) {
       toast.success('Welcome back!', {
         position: 'top-center',
         icon: '👋',
       });
       navigate('/app/dashboard');
+    } else if (result.requiresVerification) {
+      toast.success('Please verify your email first. OTP sent!', {
+        icon: '📧',
+      });
+      navigate('/verify-otp', { state: { email: result.email } });
     }
   };
 

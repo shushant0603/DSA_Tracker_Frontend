@@ -106,6 +106,18 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Login failed';
+      
+      // Check if verification is required
+      if (error.response?.data?.requiresVerification) {
+        dispatch({ type: 'LOGOUT' });
+        return { 
+          success: false, 
+          requiresVerification: true, 
+          email: error.response.data.email,
+          error: errorMessage
+        };
+      }
+      
       dispatch({
         type: 'LOGIN_FAILURE',
         payload: errorMessage,
@@ -118,6 +130,17 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'LOGIN_START' });
     try {
       const response = await api.post('/auth/register', { name, email, password });
+      
+      // Check if verification is required
+      if (response.data.requiresVerification) {
+        dispatch({ type: 'LOGOUT' }); // Reset loading state
+        return { 
+          success: true, 
+          requiresVerification: true, 
+          email: response.data.email 
+        };
+      }
+      
       const { user, token } = response.data;
       
       localStorage.setItem('token', token);
@@ -135,6 +158,41 @@ export const AuthProvider = ({ children }) => {
         type: 'LOGIN_FAILURE',
         payload: errorMessage,
       });
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const verifyOTP = async (email, otp) => {
+    dispatch({ type: 'LOGIN_START' });
+    try {
+      const response = await api.post('/auth/verify-otp', { email, otp });
+      const { user, token } = response.data;
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      dispatch({
+        type: 'LOGIN_SUCCESS',
+        payload: { user, token },
+      });
+      
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Verification failed';
+      dispatch({
+        type: 'LOGIN_FAILURE',
+        payload: errorMessage,
+      });
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const resendOTP = async (email) => {
+    try {
+      await api.post('/auth/resend-otp', { email });
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Failed to resend OTP';
       return { success: false, error: errorMessage };
     }
   };
@@ -162,6 +220,8 @@ export const AuthProvider = ({ children }) => {
     ...state,
     login,
     register,
+    verifyOTP,
+    resendOTP,
     logout,
     updateUser,
     clearError,

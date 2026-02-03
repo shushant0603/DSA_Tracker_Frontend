@@ -15,7 +15,7 @@ const HomeRoute = () => {
   }
 
   // Agar login hai → dashboard layout, nahi → landing page
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />;
+  return isAuthenticated ? <Navigate to="/app/dashboard" replace /> : <LandingPage />;
 };
 
 export default HomeRoute;
