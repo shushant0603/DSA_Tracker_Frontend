@@ -17,13 +17,15 @@ import {
   List, 
   RotateCcw, 
   TrendingUp, 
-  Calendar,
-  Target,
-  Award,
-  ArrowUpRight,
-  Sparkles,
-  Flame,
-  ChevronRight
+  Calendar, 
+  Target, 
+  Award, 
+  ArrowUpRight, 
+  Sparkles, 
+  Flame, 
+  ChevronRight,
+  BookOpen,
+  Code2
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -168,9 +170,9 @@ const Dashboard = () => {
             Track your DSA learning progress and stay motivated!
           </p>
         </div>
-        <Link to="/app/add-question" className="btn-primary flex items-center gap-2 w-fit">
-          <Plus className="w-5 h-5" />
-          Add Question
+        <Link to="/app/books" className="btn-primary flex items-center gap-2 w-fit shadow-md shadow-violet-500/20">
+          <BookOpen className="w-5 h-5" />
+          Open DSA Books
         </Link>
       </div>
 
@@ -182,7 +184,7 @@ const Dashboard = () => {
           subtitle="Problems solved"
           icon={Target}
           gradient="bg-gradient-to-br from-primary-500 to-primary-600"
-          link="/app/questions"
+          link="/app/books"
         />
         <StatCard
           title="Needs Revision"
@@ -190,7 +192,7 @@ const Dashboard = () => {
           subtitle="Review pending"
           icon={RotateCcw}
           gradient="bg-gradient-to-br from-amber-500 to-orange-500"
-          link="/app/revision"
+          link="/app/books"
         />
         <StatCard
           title="This Month"
@@ -335,27 +337,20 @@ const Dashboard = () => {
           <Sparkles className="w-5 h-5 text-primary-500" />
           Quick Actions
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <QuickActionCard
-            to="/app/add-question"
-            icon={Plus}
-            title="Add New Question"
-            description="Track a new problem"
-            gradient="bg-gradient-to-br from-primary-500 to-primary-600"
+            to="/app/books"
+            icon={BookOpen}
+            title="Interactive DSA Books"
+            description="Explore chapters & patterns"
+            gradient="bg-gradient-to-br from-violet-500 to-indigo-600"
           />
           <QuickActionCard
-            to="/app/questions"
-            icon={List}
-            title="View All Questions"
-            description="Browse your collection"
+            to="/app/profile"
+            icon={Target}
+            title="Profile & Activity"
+            description="LeetCode & Codeforces sync"
             gradient="bg-gradient-to-br from-emerald-500 to-teal-500"
-          />
-          <QuickActionCard
-            to="/app/revision"
-            icon={RotateCcw}
-            title="Practice Revision"
-            description="Review marked problems"
-            gradient="bg-gradient-to-br from-amber-500 to-orange-500"
           />
         </div>
       </div>

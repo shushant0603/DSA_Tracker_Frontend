@@ -55,17 +55,10 @@ const Register = () => {
     setIsLoading(false);
     
     if (result.success) {
-      if (result.requiresVerification) {
-        toast.success('OTP sent to your email! Please verify.', {
-          icon: '📧',
-        });
-        navigate('/verify-otp', { state: { email: result.email } });
-      } else {
-        toast.success('Account created successfully!', {
-          icon: '🎉',
-        });
-        navigate('/app/dashboard');
-      }
+      toast.success('Account created successfully!', {
+        icon: '🎉',
+      });
+      navigate('/app/dashboard');
     }
   };
 

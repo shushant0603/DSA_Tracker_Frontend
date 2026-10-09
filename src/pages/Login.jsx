@@ -48,11 +48,6 @@ const Login = () => {
         icon: '👋',
       });
       navigate('/app/dashboard');
-    } else if (result.requiresVerification) {
-      toast.success('Please verify your email first. OTP sent!', {
-        icon: '📧',
-      });
-      navigate('/verify-otp', { state: { email: result.email } });
     }
   };
 

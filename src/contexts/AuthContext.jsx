@@ -107,17 +107,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Login failed';
       
-      // Check if verification is required
-      if (error.response?.data?.requiresVerification) {
-        dispatch({ type: 'LOGOUT' });
-        return { 
-          success: false, 
-          requiresVerification: true, 
-          email: error.response.data.email,
-          error: errorMessage
-        };
-      }
-      
       dispatch({
         type: 'LOGIN_FAILURE',
         payload: errorMessage,
@@ -130,16 +119,6 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'LOGIN_START' });
     try {
       const response = await api.post('/auth/register', { name, email, password });
-      
-      // Check if verification is required
-      if (response.data.requiresVerification) {
-        dispatch({ type: 'LOGOUT' }); // Reset loading state
-        return { 
-          success: true, 
-          requiresVerification: true, 
-          email: response.data.email 
-        };
-      }
       
       const { user, token } = response.data;
       

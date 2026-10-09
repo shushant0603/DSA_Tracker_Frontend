@@ -1,596 +1,793 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
+  BookOpen, 
   Search, 
-  Filter, 
+  CheckCircle2, 
+  Circle, 
+  HelpCircle, 
   ExternalLink, 
-  Edit, 
-  Trash2, 
-  RotateCcw,
+  Code2, 
+  ChevronDown, 
+  ChevronRight, 
   ChevronLeft,
-  ChevronRight,
-  Plus,
-  Calendar,
-  Tag,
-  X,
-  Loader2,
-  Timer,
-  Bell,
-  BellOff,
-  Settings2
+  Filter, 
+  Layers, 
+  GitCommit, 
+  GitFork, 
+  Share2, 
+  Cpu, 
+  Target, 
+  Sparkles, 
+  Check, 
+  Bookmark, 
+  RotateCcw,
+  BookMarked,
+  BarChart3,
+  ArrowLeft,
+  Sun,
+  Moon,
+  User,
+  Home
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import SearchInput from '../components/SearchInput';
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
-// Schedule Edit Modal Component
-const ScheduleModal = ({ question, onClose, onSave }) => {
-  const [enabled, setEnabled] = useState(question.revisionSchedule?.enabled || false);
-  const [intervalDays, setIntervalDays] = useState(question.revisionSchedule?.intervalDays || 3);
-  const [saving, setSaving] = useState(false);
-
-  const intervals = [
-    { value: 1, label: '1 day' },
-    { value: 2, label: '2 days' },
-    { value: 3, label: '3 days' },
-    { value: 5, label: '5 days' },
-    { value: 7, label: '1 week' },
-    { value: 14, label: '2 weeks' },
-    { value: 30, label: '1 month' },
-  ];
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.patch(`/questions/${question._id}/revision-schedule`, {
-        enabled,
-        intervalDays: parseInt(intervalDays)
-      });
-      toast.success(enabled ? 'Revision schedule updated!' : 'Revision schedule disabled');
-      onSave();
-      onClose();
-    } catch (error) {
-      toast.error('Failed to update schedule');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Revision Schedule
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          {question.title}
-        </p>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white">Enable Schedule</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Auto-remind for revision</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEnabled(!enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                enabled ? 'translate-x-6' : 'translate-x-1'
-              }`} />
-            </button>
-          </div>
-
-          {enabled && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Revision Interval
-              </label>
-              <select
-                value={intervalDays}
-                onChange={(e) => setIntervalDays(e.target.value)}
-                className="input-field"
-              >
-                {intervals.map(i => (
-                  <option key={i.value} value={i.value}>Every {i.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {question.revisionSchedule?.timesRevised > 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Revised {question.revisionSchedule.timesRevised} time{question.revisionSchedule.timesRevised > 1 ? 's' : ''}
-            </p>
-          )}
-        </div>
-
-        <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+// Icon mapper for books
+const getBookIcon = (iconName) => {
+  switch (iconName) {
+    case 'Layers': return Layers;
+    case 'GitCommit': return GitCommit;
+    case 'GitFork': return GitFork;
+    case 'Share2': return Share2;
+    case 'Cpu': return Cpu;
+    case 'Target': return Target;
+    case 'Search': return Search;
+    default: return BookOpen;
+  }
 };
 
 const QuestionsList = () => {
-  const [questions, setQuestions] = useState([]);
+  const navigate = useNavigate();
+  const { darkMode, toggleDarkMode } = useTheme();
+  const { user } = useAuth();
+
+  const [books, setBooks] = useState([]);
+  const [selectedBookId, setSelectedBookId] = useState('book-1');
+  const [selectedChapterName, setSelectedChapterName] = useState('all');
+  const [bookData, setBookData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({});
-  const [scheduleModal, setScheduleModal] = useState(null); // Question to edit schedule
-  const [filters, setFilters] = useState({
-    search: '',
-    topic: '',
-    platform: '',
-    difficulty: '',
-    needsRevision: '',
-    sortBy: 'solvedDate',
-    sortOrder: 'desc',
-    page: 1,
-    limit: 20,
+  const [bookLoading, setBookLoading] = useState(true);
+
+  // Filters & Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // all, solved, revision, unsolved
+  const [collapsedSections, setCollapsedSections] = useState({});
+
+  // Local storage for user overrides (solved, revision)
+  const [userStatuses, setUserStatuses] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dsa_user_question_statuses');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
   });
-  const [showFilters, setShowFilters] = useState(false);
 
-  const topics = [
-    'Array', 'String', 'Hash Table', 'Dynamic Programming', 'Math', 'Sorting',
-    'Greedy', 'Depth-First Search', 'Breadth-First Search', 'Tree', 'Binary Search',
-    'Matrix', 'Two Pointers', 'Bit Manipulation', 'Stack', 'Heap', 'Graph',
-    'Design', 'Backtracking', 'Sliding Window', 'Union Find', 'Trie', 'Recursion',
-    'Binary Tree', 'Binary Search Tree', 'Linked List', 'Queue', 'Other'
-  ];
+  // Save overrides to localStorage
+  const handleStatusChange = (questionId, currentStatus, e) => {
+    e.stopPropagation();
+    let nextStatus = 'solved';
+    if (currentStatus === 'solved') nextStatus = 'revision';
+    else if (currentStatus === 'revision') nextStatus = 'unsolved';
+    else nextStatus = 'solved';
 
-  const platforms = [
-    'LeetCode', 'Codeforces', 'GeeksforGeeks', 'HackerRank', 'CodeChef', 'AtCoder', 'Other'
-  ];
-
-  const difficulties = ['Easy', 'Medium', 'Hard'];
-
-  const handleSearch = useCallback((searchValue) => {
-    setFilters(prev => {
-      if (prev.search !== searchValue) {
-        return {
-          ...prev,
-          search: searchValue,
-          page: 1, // Reset to first page when search changes
-        };
-      }
-      return prev;
-    });
-  }, []);
-
-  const fetchQuestions = useCallback(async (currentFilters) => {
+    const updated = { ...userStatuses, [questionId]: nextStatus };
+    setUserStatuses(updated);
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      Object.entries(currentFilters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-  
-      const response = await api.get(`/questions?${params.toString()}`);
-      
-      console.log("API Response Questions:", response.data.questions); // <-- log here
-  
-      setQuestions(response.data.questions);
-      setPagination(response.data.pagination);
-    } catch (error) {
-      toast.error('Failed to fetch questions');
-      console.error('Error fetching questions:', error);
-    } finally {
-      setLoading(false);
+      localStorage.setItem('dsa_user_question_statuses', JSON.stringify(updated));
+    } catch (err) {
+      console.error(err);
     }
-  }, []);
-  
+
+    if (nextStatus === 'solved') toast.success('Marked as Solved! 🎉', { duration: 1500 });
+    else if (nextStatus === 'revision') toast('Marked for Revision 🧐', { icon: '🧐', duration: 1500 });
+    else toast('Marked as Unsolved', { icon: '⬜', duration: 1500 });
+  };
+
+  // Fetch all books metadata
   useEffect(() => {
-    fetchQuestions(filters);
-  }, [filters, fetchQuestions]);
-  
-
-
-  const handleFilterChange = useCallback((key, value) => {
-    setFilters(prev => {
-      if (prev[key] !== value) {
-        return {
-          ...prev,
-          [key]: value,
-          page: 1, // Reset to first page when filters change
-        };
+    const fetchBooks = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get('/questions/books');
+        setBooks(res.data || []);
+        if (res.data && res.data.length > 0 && !selectedBookId) {
+          setSelectedBookId(res.data[0].id);
+        }
+      } catch (err) {
+        console.error('Error fetching books:', err);
+        toast.error('Failed to load books list');
+      } finally {
+        setLoading(false);
       }
-      return prev;
-    });
+    };
+    fetchBooks();
   }, []);
 
-  const handlePageChange = useCallback((newPage) => {
-    setFilters(prev => {
-      if (prev.page !== newPage) {
-        return {
-          ...prev,
-          page: newPage,
-        };
+  // Fetch selected book hierarchy data
+  useEffect(() => {
+    if (!selectedBookId) return;
+    const fetchBookHierarchy = async () => {
+      try {
+        setBookLoading(true);
+        const res = await api.get(`/questions/book/${selectedBookId}`);
+        setBookData(res.data);
+        setSelectedChapterName('all');
+        setCollapsedSections({});
+      } catch (err) {
+        console.error('Error fetching book data:', err);
+        toast.error('Failed to load book content');
+      } finally {
+        setBookLoading(false);
       }
-      return prev;
-    });
-  }, []);
+    };
+    fetchBookHierarchy();
+  }, [selectedBookId]);
 
-  const handleDelete = async (questionId) => {
-    if (!window.confirm('Are you sure you want to delete this question?')) {
-      return;
-    }
-
-    try {
-      await api.delete(`/questions/${questionId}`);
-      toast.success('Question deleted successfully');
-      fetchQuestions();
-    } catch (error) {
-      toast.error('Failed to delete question');
-      console.error('Error deleting question:', error);
-    }
+  // Compute live question status
+  const getQuestionStatus = (q) => {
+    if (userStatuses[q._serial] !== undefined) return userStatuses[q._serial];
+    if (userStatuses[`${selectedBookId}-${q.id}`] !== undefined) return userStatuses[`${selectedBookId}-${q.id}`];
+    if (q.status) return q.status;
+    return q.solved ? 'solved' : 'unsolved';
   };
 
-  const handleToggleRevision = async (questionId, needsRevision) => {
-    try {
-      await api.patch(`/questions/${questionId}/toggle-revision`, {
-        needsRevision: !needsRevision,
+  // Toggle section collapse
+  const toggleSection = (sectionName) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionName]: !prev[sectionName]
+    }));
+  };
+
+  const expandAllSections = () => setCollapsedSections({});
+  const collapseAllSections = () => {
+    if (!bookData) return;
+    const allSecs = {};
+    bookData.chapters.forEach(ch => {
+      ch.sections.forEach(sec => {
+        allSecs[sec.name] = true;
       });
-      toast.success('Revision status updated');
-      fetchQuestions();
-    } catch (error) {
-      toast.error('Failed to update revision status');
-      console.error('Error updating revision status:', error);
-    }
+    });
+    setCollapsedSections(allSecs);
   };
 
-  const getDifficultyBadge = (difficulty) => {
-    const baseClasses = 'badge';
-    switch (difficulty) {
-      case 'Easy':
-        return `${baseClasses} badge-easy`;
-      case 'Medium':
-        return `${baseClasses} badge-medium`;
-      case 'Hard':
-        return `${baseClasses} badge-hard`;
-      default:
-        return baseClasses;
-    }
+  // Active book info
+  const activeBookMeta = useMemo(() => {
+    return books.find(b => b.id === selectedBookId) || bookData?.book || {};
+  }, [books, selectedBookId, bookData]);
+
+  // Filtered Chapters & Sections
+  const filteredChapters = useMemo(() => {
+    if (!bookData || !bookData.chapters) return [];
+
+    return bookData.chapters
+      .filter(ch => selectedChapterName === 'all' || ch.name === selectedChapterName)
+      .map(ch => {
+        const filteredSections = ch.sections.map(sec => {
+          const filteredQuestions = sec.questions.filter(q => {
+            const status = getQuestionStatus(q);
+            
+            // Status filter
+            if (statusFilter === 'solved' && status !== 'solved') return false;
+            if (statusFilter === 'revision' && status !== 'revision') return false;
+            if (statusFilter === 'unsolved' && status !== 'unsolved') return false;
+
+            // Search query
+            if (searchQuery.trim()) {
+              const query = searchQuery.toLowerCase().trim();
+              const matchTitle = q.title.toLowerCase().includes(query);
+              const matchId = String(q.id).includes(query);
+              const matchSection = q.section.toLowerCase().includes(query);
+              const matchNote = q.note ? q.note.toLowerCase().includes(query) : false;
+              if (!matchTitle && !matchId && !matchSection && !matchNote) return false;
+            }
+
+            return true;
+          });
+
+          const solvedCount = filteredQuestions.filter(q => getQuestionStatus(q) === 'solved').length;
+
+          return {
+            ...sec,
+            questions: filteredQuestions,
+            filteredTotal: filteredQuestions.length,
+            filteredSolved: solvedCount
+          };
+        }).filter(sec => sec.questions.length > 0);
+
+        const totalQ = filteredSections.reduce((acc, s) => acc + s.questions.length, 0);
+        const solvedQ = filteredSections.reduce((acc, s) => acc + s.filteredSolved, 0);
+
+        return {
+          ...ch,
+          sections: filteredSections,
+          filteredTotal: totalQ,
+          filteredSolved: solvedQ
+        };
+      }).filter(ch => ch.sections.length > 0);
+  }, [bookData, selectedChapterName, statusFilter, searchQuery, userStatuses]);
+
+  // Overall book live statistics
+  const currentBookStats = useMemo(() => {
+    if (!bookData || !bookData.chapters) return { total: 0, solved: 0, revision: 0, percent: 0 };
+    let total = 0;
+    let solved = 0;
+    let revision = 0;
+
+    bookData.chapters.forEach(ch => {
+      ch.sections.forEach(sec => {
+        sec.questions.forEach(q => {
+          total++;
+          const st = getQuestionStatus(q);
+          if (st === 'solved') solved++;
+          if (st === 'revision') revision++;
+        });
+      });
+    });
+
+    const percent = total > 0 ? Math.round((solved / total) * 100) : 0;
+    return { total, solved, revision, percent };
+  }, [bookData, userStatuses]);
+
+  // Navigation handlers for chapters
+  const currentChapterIndex = useMemo(() => {
+    if (!bookData || selectedChapterName === 'all') return -1;
+    return bookData.chapters.findIndex(c => c.name === selectedChapterName);
+  }, [bookData, selectedChapterName]);
+
+  const goToPrevChapter = () => {
+    if (!bookData || currentChapterIndex <= 0) return;
+    setSelectedChapterName(bookData.chapters[currentChapterIndex - 1].name);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const goToNextChapter = () => {
+    if (!bookData || currentChapterIndex >= bookData.chapters.length - 1) return;
+    setSelectedChapterName(bookData.chapters[currentChapterIndex + 1].name);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
-          <p className="text-gray-500 dark:text-gray-400">Loading questions...</p>
+          <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium">Loading DSA Books...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">All Questions</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            <span className="font-semibold text-primary-600 dark:text-primary-400">{pagination.totalQuestions}</span> questions in your collection
-          </p>
-        </div>
-        <Link
-          to="/app/add-question"
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add Question
-        </Link>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="card">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <SearchInput onSearch={handleSearch} />
-          </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col">
+      
+      {/* 🌟 TOP NAVIGATION BAR (LIKE PLAYGROUND) */}
+      <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 px-4 flex items-center justify-between shadow-sm">
+        {/* Left: Back button + Title */}
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`btn-secondary flex items-center gap-2 ${showFilters ? 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-700' : ''}`}
+            onClick={() => {
+              if (window.history.length > 2) {
+                navigate(-1);
+              } else {
+                navigate('/app/dashboard');
+              }
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:text-white hover:bg-violet-600 dark:hover:bg-violet-600 bg-gray-100 dark:bg-gray-700/80 border border-gray-200 dark:border-gray-600 rounded-xl transition-all shadow-sm group"
+            title="Go Back"
           >
-            <Filter className="w-4 h-4" />
-            Filters
-            {(filters.topic || filters.platform || filters.difficulty || filters.needsRevision) && (
-              <span className="w-2 h-2 rounded-full bg-primary-500" />
-            )}
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span>Back</span>
+          </button>
+
+          <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
+
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-sm shadow-violet-500/20">
+              <BookMarked className="w-4 h-4" />
+            </div>
+            <div>
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                DSA Practice Books
+                <span className="hidden md:inline text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-bold uppercase tracking-wider">
+                  Interactive Reader
+                </span>
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Actions (Theme Toggle, Profile) */}
+        <div className="flex items-center gap-2.5">
+          {/* Dark / Light Mode */}
+          <button
+            onClick={toggleDarkMode}
+            className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          {/* Profile Shortcut */}
+          <button
+            onClick={() => navigate('/app/profile')}
+            className="p-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-violet-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-all flex items-center gap-1.5"
+            title="Profile & Settings"
+          >
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+              {user?.name ? user.name[0].toUpperCase() : <User className="w-3.5 h-3.5" />}
+            </div>
           </button>
         </div>
+      </header>
 
-        {showFilters && (
-          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Filter Options</h3>
-              {(filters.topic || filters.platform || filters.difficulty || filters.needsRevision) && (
+      {/* 📚 SUB-HEADER: BOOK SELECTOR CAROUSEL */}
+      <div className="bg-white/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 px-4 py-3 backdrop-blur-md sticky top-16 z-30 shadow-xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          
+          {/* Books List (Horizontal Scroll) */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 flex-1">
+            {books.map((b) => {
+              const isSelected = selectedBookId === b.id;
+              const IconComponent = getBookIcon(b.icon);
+
+              return (
                 <button
-                  onClick={() => setFilters(prev => ({ ...prev, topic: '', platform: '', difficulty: '', needsRevision: '', page: 1 }))}
-                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 flex items-center gap-1"
+                  key={b.id}
+                  onClick={() => setSelectedBookId(b.id)}
+                  className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-violet-600 shadow-md shadow-violet-500/25 scale-[1.02]'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-violet-400 dark:hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/20'
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                  Clear all
+                  <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-violet-600 dark:text-violet-400'}`}>
+                    <IconComponent className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold whitespace-nowrap">
+                        {b.shortTitle || b.name}
+                      </span>
+                    </div>
+                    <div className={`text-[9px] font-medium flex items-center gap-1.5 ${isSelected ? 'text-violet-100' : 'text-gray-400 dark:text-gray-500'}`}>
+                      <span>{b.chaptersCount} Ch</span>
+                      <span>•</span>
+                      <span>{b.totalQuestions} Qs</span>
+                    </div>
+                  </div>
                 </button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Topic
-              </label>
-              <select
-                value={filters.topic}
-                onChange={(e) => handleFilterChange('topic', e.target.value)}
-                className="input-field"
-              >
-                <option value="">All Topics</option>
-                {topics.map(topic => (
-                  <option key={topic} value={topic}>{topic}</option>
-                ))}
-              </select>
-            </div>
+              );
+            })}
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Platform
-              </label>
-              <select
-                value={filters.platform}
-                onChange={(e) => handleFilterChange('platform', e.target.value)}
-                className="input-field"
-              >
-                <option value="">All Platforms</option>
-                {platforms.map(platform => (
-                  <option key={platform} value={platform}>{platform}</option>
-                ))}
-              </select>
+          {/* Quick Progress Badge */}
+          <div className="hidden lg:flex items-center gap-3 bg-gray-50 dark:bg-gray-700/50 px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div className="text-right">
+              <span className="text-[10px] text-gray-500 dark:text-gray-400 block">Progress</span>
+              <p className="text-xs font-bold text-gray-900 dark:text-white">
+                {currentBookStats.solved} <span className="text-[10px] font-normal text-gray-400">/ {currentBookStats.total}</span>
+              </p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Difficulty
-              </label>
-              <select
-                value={filters.difficulty}
-                onChange={(e) => handleFilterChange('difficulty', e.target.value)}
-                className="input-field"
-              >
-                <option value="">All Difficulties</option>
-                {difficulties.map(difficulty => (
-                  <option key={difficulty} value={difficulty}>{difficulty}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Status
-              </label>
-              <select
-                value={filters.needsRevision}
-                onChange={(e) => handleFilterChange('needsRevision', e.target.value)}
-                className="input-field"
-              >
-                <option value="">All Questions</option>
-                <option value="true">Needs Revision</option>
-                <option value="false">Reviewed</option>
-              </select>
-            </div>
+            <div className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-600/10 dark:bg-violet-400/10 border-2 border-violet-500 text-violet-600 dark:text-violet-400 font-black text-[10px]">
+              {currentBookStats.percent}%
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Questions List */}
-      <div className="space-y-4">
-        {questions.length === 0 ? (
-          <div className="card text-center py-16">
-            <div className="w-16 h-16 mx-auto bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No questions found</h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
-              {filters.search || filters.topic || filters.platform || filters.difficulty 
-                ? "Try adjusting your filters or search query" 
-                : "Start building your collection by adding your first question"}
-            </p>
-            <Link to="/app/add" className="btn-primary inline-flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Add Your First Question
-            </Link>
-          </div>
-        ) : (
-          questions.map((question) => (
-            <div key={question._id} className="card group hover:shadow-lg hover:border-primary-200 dark:hover:border-primary-800 transition-all duration-300">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center flex-wrap gap-2 mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors truncate">
-                      {question.title}
-                    </h3>
-                    <span className={getDifficultyBadge(question.difficulty)}>
-                      {question.difficulty}
-                    </span>
-                    {question.needsRevision && (
-                      <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border border-amber-200 dark:border-amber-700">
-                        <RotateCcw className="w-3 h-3 mr-1" />
-                        Needs Revision
-                      </span>
-                    )}
-                    {question.revisionSchedule?.enabled && (
-                      <span className="badge bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border border-purple-200 dark:border-purple-700">
-                        <Timer className="w-3 h-3 mr-1" />
-                        Every {question.revisionSchedule.intervalDays}d
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-3 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-md font-medium">
-                      {question.platform}
-                    </span>
-                    <span className="text-gray-300 dark:text-gray-600">|</span>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {Array.isArray(question.topic) ? (
-                        question.topic.slice(0, 3).map((topic, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-0.5 text-xs font-medium text-primary-700 bg-primary-50 rounded-md dark:bg-primary-900/30 dark:text-primary-300"
-                          >
-                            {topic}
-                          </span>
-                        ))
-                      ) : null}
-                      {Array.isArray(question.topic) && question.topic.length > 3 && (
-                        <span className="text-xs text-gray-500">+{question.topic.length - 3} more</span>
-                      )}
-                    </div>
-                    <span className="text-gray-300 dark:text-gray-600">|</span>
-                    <span className="inline-flex items-center gap-1 text-gray-500">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {format(new Date(question.solvedDate), 'MMM dd, yyyy')}
-                    </span>
-                  </div>
-
-                  {question.description && (
-                    <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm line-clamp-2">
-                      {question.description}
-                    </p>
-                  )}
-
-                  {question.tags && question.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {question.tags.slice(0, 5).map((tag, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-                        >
-                          <Tag className="w-2.5 h-2.5" />
-                          {tag}
-                        </span>
-                      ))}
-                      {question.tags.length > 5 && (
-                        <span className="text-xs text-gray-500">+{question.tags.length - 5}</span>
-                      )}
-                    </div>
-                  )}
-
-                  <a
-                    href={question.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View Problem
-                  </a>
+      {/* 📖 MAIN BOOK BODY */}
+      <div className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+        
+        {/* Book Hero Card */}
+        {activeBookMeta && (
+          <div className="mb-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-950 text-white shadow-xl relative overflow-hidden border border-gray-700">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 rounded-full bg-violet-600/20 blur-3xl pointer-events-none"></div>
+            
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/20 border border-violet-400/30 text-violet-300 text-xs font-semibold mb-3">
+                  <Sparkles className="w-3.5 h-3.5" /> Complete Practice Book
                 </div>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white mb-2">
+                  {activeBookMeta.name || activeBookMeta.shortTitle}
+                </h2>
+                <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
+                  {activeBookMeta.description || 'Master all algorithmic patterns and problem archetypes in this volume.'}
+                </p>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setScheduleModal(question)}
-                    className={`p-2.5 rounded-xl transition-all duration-200 ${
-                      question.revisionSchedule?.enabled
-                        ? 'bg-purple-100 text-purple-600 hover:bg-purple-200 dark:bg-purple-900/50 dark:text-purple-400 dark:hover:bg-purple-800/50'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-purple-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 dark:hover:text-purple-400'
-                    }`}
-                    title="Schedule revision"
-                  >
-                    {question.revisionSchedule?.enabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-                  </button>
-                  
-                  <button
-                    onClick={() => handleToggleRevision(question._id, question.needsRevision)}
-                    className={`p-2.5 rounded-xl transition-all duration-200 ${
-                      question.needsRevision
-                        ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-400 dark:hover:bg-amber-800/50'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-amber-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 dark:hover:text-amber-400'
-                    }`}
-                    title={question.needsRevision ? 'Mark as reviewed' : 'Mark for revision'}
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                  
-                  <button
-                    onClick={() => handleDelete(question._id)}
-                    className="p-2.5 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-red-900/50 dark:hover:text-red-400 transition-all duration-200"
-                    title="Delete question"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+              {/* Progress Bar & Quick Stats */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/10 flex flex-col gap-3 min-w-[260px]">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-300 font-medium">Volume Mastery</span>
+                  <span className="font-bold text-violet-300">{currentBookStats.percent}% Completed</span>
+                </div>
+                <div className="w-full bg-gray-700/60 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-violet-400 to-indigo-400 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${currentBookStats.percent}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                  <div className="bg-white/5 rounded-lg py-1 px-2">
+                    <p className="text-[10px] text-gray-400">Total</p>
+                    <p className="text-sm font-bold text-white">{currentBookStats.total}</p>
+                  </div>
+                  <div className="bg-emerald-500/20 rounded-lg py-1 px-2 border border-emerald-500/30">
+                    <p className="text-[10px] text-emerald-300">Solved</p>
+                    <p className="text-sm font-bold text-emerald-300">{currentBookStats.solved}</p>
+                  </div>
+                  <div className="bg-amber-500/20 rounded-lg py-1 px-2 border border-amber-500/30">
+                    <p className="text-[10px] text-amber-300">Revision</p>
+                    <p className="text-sm font-bold text-amber-300">{currentBookStats.revision}</p>
+                  </div>
                 </div>
               </div>
             </div>
-          ))
+          </div>
         )}
-      </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="card">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing page <span className="font-semibold text-gray-900 dark:text-white">{pagination.currentPage}</span> of <span className="font-semibold text-gray-900 dark:text-white">{pagination.totalPages}</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
+        {/* 📑 TWO-COLUMN LAYOUT: Chapter Sidebar & Question Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* 👈 LEFT SIDEBAR: CHAPTERS / TOC */}
+          <div className="lg:col-span-3 space-y-4 lg:sticky lg:top-40">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700 mb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  <BookOpen className="w-4 h-4 text-violet-600" />
+                  Table of Contents
+                </div>
+                <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-2 py-0.5 rounded-full">
+                  {bookData?.chapters?.length || 0} Chapters
+                </span>
+              </div>
+
+              {/* All Chapters option */}
               <button
-                onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={!pagination.hasPrev}
-                className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-300 dark:hover:bg-gray-700 dark:hover:border-gray-600 transition-all"
+                onClick={() => setSelectedChapterName('all')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs font-semibold transition-all mb-1 ${
+                  selectedChapterName === 'all'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-500/20'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'
+                }`}
               >
-                <ChevronLeft className="w-4 h-4" />
+                <span>📖 All Chapters (Full Book)</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${selectedChapterName === 'all' ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+                  {currentBookStats.total}
+                </span>
               </button>
-              
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                  const pageNum = Math.max(1, Math.min(pagination.currentPage - 2, pagination.totalPages - 4)) + i;
-                  if (pageNum > pagination.totalPages) return null;
+
+              {/* Chapters list */}
+              <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
+                {bookData?.chapters?.map((ch, idx) => {
+                  const isSelected = selectedChapterName === ch.name;
+                  const chapterSolved = ch.sections.reduce((acc, s) => {
+                    return acc + s.questions.filter(q => getQuestionStatus(q) === 'solved').length;
+                  }, 0);
+                  const isCompleted = chapterSolved === ch.total && ch.total > 0;
+
                   return (
                     <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${
-                        pageNum === pagination.currentPage
-                          ? 'bg-primary-600 text-white'
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      key={ch.name}
+                      onClick={() => setSelectedChapterName(ch.name)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs transition-all ${
+                        isSelected
+                          ? 'bg-violet-600 text-white font-bold shadow-md shadow-violet-500/20'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 font-medium'
                       }`}
                     >
-                      {pageNum}
+                      <div className="flex items-center gap-2 truncate">
+                        <span className={`w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-md text-[10px] font-bold ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        <span className="truncate">{ch.name}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        {isCompleted ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {chapterSolved}/{ch.total}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
               </div>
-              
-              <button
-                onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={!pagination.hasNext}
-                className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-300 dark:hover:bg-gray-700 dark:hover:border-gray-600 transition-all"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Schedule Modal */}
-      {scheduleModal && (
-        <ScheduleModal
-          question={scheduleModal}
-          onClose={() => setScheduleModal(null)}
-          onSave={() => fetchQuestions(filters)}
-        />
-      )}
+          {/* 👉 RIGHT MAIN AREA: SECTIONS & QUESTIONS */}
+          <div className="lg:col-span-9 space-y-4">
+            
+            {/* Search & Filter Toolbar */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-3.5 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+              
+              {/* Search input */}
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search problem, ID, or pattern..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'solved', label: '✅ Solved' },
+                  { id: 'revision', label: '🧐 Revision' },
+                  { id: 'unsolved', label: '⬜ Unsolved' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                      statusFilter === tab.id
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Expand / Collapse all */}
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <button
+                  onClick={expandAllSections}
+                  className="px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Expand all sections"
+                >
+                  Expand All
+                </button>
+                <span>•</span>
+                <button
+                  onClick={collapseAllSections}
+                  className="px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Collapse all sections"
+                >
+                  Collapse All
+                </button>
+              </div>
+            </div>
+
+            {/* Questions Loader */}
+            {bookLoading ? (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-16 text-center">
+                <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-gray-500 text-sm">Organizing chapters and problem patterns...</p>
+              </div>
+            ) : filteredChapters.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-16 text-center">
+                <BookOpen className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-gray-700 dark:text-gray-300 mb-1">No matching problems found</h3>
+                <p className="text-xs text-gray-400 mb-4">Try clearing your search query or status filter.</p>
+                <button
+                  onClick={() => { setSearchQuery(''); setStatusFilter('all'); setSelectedChapterName('all'); }}
+                  className="px-4 py-2 rounded-xl bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 transition-colors"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              /* CHAPTERS RENDER */
+              <div className="space-y-6">
+                {filteredChapters.map((chapter) => (
+                  <div key={chapter.name} className="space-y-3">
+                    
+                    {/* Chapter Title Bar */}
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-5 rounded-full bg-violet-600"></span>
+                        <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight">
+                          Chapter: {chapter.name}
+                        </h3>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        {chapter.filteredSolved} / {chapter.filteredTotal} Solved
+                      </span>
+                    </div>
+
+                    {/* Sections Accordions */}
+                    <div className="space-y-3">
+                      {chapter.sections.map((section) => {
+                        const isCollapsed = !!collapsedSections[section.name];
+                        const sectionSolved = section.questions.filter(q => getQuestionStatus(q) === 'solved').length;
+                        const sectionTotal = section.questions.length;
+
+                        return (
+                          <div
+                            key={section.name}
+                            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm transition-all"
+                          >
+                            {/* Section Header Button */}
+                            <button
+                              onClick={() => toggleSection(section.name)}
+                              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 dark:bg-gray-800/80 hover:bg-violet-50/50 dark:hover:bg-violet-900/10 border-b border-gray-100 dark:border-gray-700/60 transition-colors text-left"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className={`p-1 rounded-lg transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>
+                                  <ChevronDown className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                                </span>
+                                <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                                  {section.name}
+                                </h4>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                  {sectionSolved} of {sectionTotal} done
+                                </span>
+                                <div className="w-16 bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                  <div 
+                                    className="bg-emerald-500 h-full rounded-full" 
+                                    style={{ width: `${sectionTotal > 0 ? (sectionSolved / sectionTotal) * 100 : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </button>
+
+                            {/* Section Question Rows */}
+                            {!isCollapsed && (
+                              <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                                {section.questions.map((q) => {
+                                  const status = getQuestionStatus(q);
+                                  const isSolved = status === 'solved';
+                                  const isRevision = status === 'revision';
+
+                                  return (
+                                    <div
+                                      key={q._serial}
+                                      className={`flex items-center justify-between px-4 py-3 transition-colors group ${
+                                        isSolved 
+                                          ? 'bg-emerald-50/30 dark:bg-emerald-950/10 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20' 
+                                          : isRevision 
+                                            ? 'bg-amber-50/30 dark:bg-amber-950/10 hover:bg-amber-50/50 dark:hover:bg-amber-950/20'
+                                            : 'hover:bg-violet-50/30 dark:hover:bg-violet-950/10'
+                                      }`}
+                                    >
+                                      {/* Left: Status Toggle + Problem # + Title + Notes */}
+                                      <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
+                                        
+                                        {/* Status Button */}
+                                        <button
+                                          onClick={(e) => handleStatusChange(q._serial, status, e)}
+                                          className="p-1 rounded-lg hover:scale-110 transition-transform flex-shrink-0"
+                                          title={`Current: ${status.toUpperCase()} (Click to toggle: Unsolved -> Solved -> Need Revision)`}
+                                        >
+                                          {isSolved ? (
+                                            <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-100 dark:fill-emerald-950" />
+                                          ) : isRevision ? (
+                                            <span className="w-5 h-5 flex items-center justify-center text-sm">🧐</span>
+                                          ) : (
+                                            <Circle className="w-5 h-5 text-gray-300 dark:text-gray-600 hover:text-gray-400" />
+                                          )}
+                                        </button>
+
+                                        {/* LeetCode ID Pill */}
+                                        <span className="font-mono text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/70 px-2 py-0.5 rounded-md flex-shrink-0">
+                                          #{q.id}
+                                        </span>
+
+                                        {/* Title + Notes */}
+                                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                          <a
+                                            href={q.leetcodeUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`text-xs font-semibold hover:underline truncate ${
+                                              isSolved
+                                                ? 'text-emerald-700 dark:text-emerald-300'
+                                                : isRevision
+                                                  ? 'text-amber-700 dark:text-amber-300'
+                                                  : 'text-gray-900 dark:text-gray-100'
+                                            }`}
+                                          >
+                                            {q.title}
+                                          </a>
+
+                                          {/* Note badge */}
+                                          {q.note && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-medium">
+                                              {q.note}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Right: Actions (LeetCode Link) */}
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <a
+                                          href={q.leetcodeUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1.5 rounded-lg text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all text-xs flex items-center gap-1 font-medium"
+                                          title="Open on LeetCode"
+                                        >
+                                          <ExternalLink className="w-4 h-4" />
+                                          <span className="hidden sm:inline">LeetCode</span>
+                                        </a>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Chapter Navigation Pagination at bottom */}
+                {selectedChapterName !== 'all' && bookData && bookData.chapters.length > 1 && (
+                  <div className="flex items-center justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <button
+                      onClick={goToPrevChapter}
+                      disabled={currentChapterIndex <= 0}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Previous Chapter
+                    </button>
+
+                    <button
+                      onClick={() => setSelectedChapterName('all')}
+                      className="text-xs text-violet-600 dark:text-violet-400 font-semibold hover:underline"
+                    >
+                      View All Chapters
+                    </button>
+
+                    <button
+                      onClick={goToNextChapter}
+                      disabled={currentChapterIndex >= bookData.chapters.length - 1}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Next Chapter <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

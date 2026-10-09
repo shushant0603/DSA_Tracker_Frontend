@@ -6,13 +6,9 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import VerifyOTP from './pages/VerifyOTP';
 import Dashboard from './pages/Dashboard';
-import AddQuestion from './pages/AddQuestion';
 import QuestionsList from './pages/QuestionsList';
-import Revision from './pages/Revision';
 import Profile from './pages/Profile';
-import CodePlayground from './pages/CodePlayground';
 import HomeRoute from './pages/HomeRoute';
 
 const ProtectedRoute = ({ children }) => {
@@ -65,8 +61,8 @@ function App() {
               }}
             />
             <Routes>
-                {/* Landing Page (sabko visible) */}
-                <Route path="/" element={<HomeRoute />} />
+              {/* Landing Page (sabko visible) */}
+              <Route path="/" element={<HomeRoute />} />
               <Route
                 path="/login"
                 element={
@@ -83,20 +79,20 @@ function App() {
                   </PublicRoute>
                 }
               />
+              {/* DSA Books - Dedicated immersive reader route (outside Layout) */}
               <Route
-                path="/verify-otp"
-                element={
-                  <PublicRoute>
-                    <VerifyOTP />
-                  </PublicRoute>
-                }
-              />
-              {/* Playground - Separate full-screen route (outside Layout) */}
-              <Route
-                path="/app/playground"
+                path="/app/books"
                 element={
                   <ProtectedRoute>
-                    <CodePlayground />
+                    <QuestionsList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app/questions"
+                element={
+                  <ProtectedRoute>
+                    <QuestionsList />
                   </ProtectedRoute>
                 }
               />
@@ -111,9 +107,6 @@ function App() {
                  {/* Default child route */}
                 <Route index element={<Navigate to="/app/dashboard" replace/>} />
                 <Route path="dashboard" element={<Dashboard />} />
-                <Route path="add-question" element={<AddQuestion />} />
-                <Route path="questions" element={<QuestionsList />} />
-                <Route path="revision" element={<Revision />} />
                 <Route path="profile" element={<Profile />} />
               </Route>
               {/* Catch-all for undefined routes */}

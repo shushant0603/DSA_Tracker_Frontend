@@ -4,9 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   Home,
-  Plus,
   List,
-  RotateCcw,
   User,
   Menu,
   X,
@@ -15,7 +13,8 @@ import {
   LogOut,
   Code2,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 
 const Layout = () => {
@@ -26,10 +25,7 @@ const Layout = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/app/dashboard', icon: Home, description: 'Overview & stats' },
-    { name: 'Add Question', href: '/app/add-question', icon: Plus, description: 'Track new problem' },
-    { name: 'All Questions', href: '/app/questions', icon: List, description: 'Browse collection' },
-    { name: 'Revision', href: '/app/revision', icon: RotateCcw, description: 'Practice mode' },
-    { name: 'Playground', href: '/app/playground', icon: Code2, description: 'Code & run' },
+    { name: 'DSA Books', href: '/app/books', icon: BookOpen, description: 'Chapters & Patterns' },
     { name: 'Profile', href: '/app/profile', icon: User, description: 'Account settings' },
   ];
 
