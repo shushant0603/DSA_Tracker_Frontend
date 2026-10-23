@@ -41,8 +41,50 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get('/questions/stats');
-      setStats(response.data);
+      const response = await api.get('/questions/all?limit=0');
+      const questions = response.data.questions || [];
+      let userStatuses = {};
+
+      try {
+        userStatuses = JSON.parse(localStorage.getItem('dsa_user_question_statuses') || '{}');
+      } catch (error) {
+        console.error('Error reading saved question statuses:', error);
+      }
+
+      const getStatus = (question) => {
+        const savedStatus = userStatuses[question._serial]
+          ?? userStatuses[`${question.bookId}-${question.id}`];
+        return savedStatus || question.status || (question.solved ? 'solved' : 'unsolved');
+      };
+
+      const chapterCounts = {};
+      const difficultyCounts = {};
+      let solvedQuestions = 0;
+      let revisionCount = 0;
+
+      questions.forEach((question) => {
+        const status = getStatus(question);
+        if (status === 'solved') solvedQuestions++;
+        if (status === 'revision') revisionCount++;
+
+        const chapter = question.chapter || 'Uncategorized';
+        chapterCounts[chapter] = (chapterCounts[chapter] || 0) + 1;
+
+        const difficulty = question.difficulty || 'Not tagged';
+        difficultyCounts[difficulty] = (difficultyCounts[difficulty] || 0) + 1;
+      });
+
+      setStats({
+        totalQuestions: questions.length,
+        solvedQuestions,
+        revisionCount,
+        topicStats: Object.entries(chapterCounts)
+          .map(([_id, count]) => ({ _id, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10),
+        difficultyStats: Object.entries(difficultyCounts)
+          .map(([_id, count]) => ({ _id, count }))
+      });
     } catch (error) {
       toast.error('Failed to fetch statistics');
       console.error('Error fetching stats:', error);
@@ -195,17 +237,16 @@ const Dashboard = () => {
           link="/app/books"
         />
         <StatCard
-          title="This Month"
-          value={stats?.recentQuestions || 0}
-          subtitle="Recent progress"
+          title="Solved Questions"
+          value={stats?.solvedQuestions || 0}
+          subtitle="Across all DSA books"
           icon={Calendar}
           gradient="bg-gradient-to-br from-emerald-500 to-teal-500"
-          trend="+12%"
         />
         <StatCard
           title="Completion"
-          value={`${Math.min(100, Math.round(((stats?.totalQuestions || 0) / 100) * 100))}%`}
-          subtitle="Towards 100 goal"
+          value={`${stats?.totalQuestions ? Math.round(((stats?.solvedQuestions || 0) / stats.totalQuestions) * 100) : 0}%`}
+          subtitle="Overall book progress"
           icon={Award}
           gradient="bg-gradient-to-br from-violet-500 to-purple-600"
         />
