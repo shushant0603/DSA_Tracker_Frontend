@@ -8,9 +8,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
 } from 'recharts';
 import { 
   Plus, 
@@ -37,6 +34,15 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchStats();
+    const refreshStats = () => fetchStats();
+    window.addEventListener('focus', refreshStats);
+    window.addEventListener('storage', refreshStats);
+    window.addEventListener('question-status-updated', refreshStats);
+    return () => {
+      window.removeEventListener('focus', refreshStats);
+      window.removeEventListener('storage', refreshStats);
+      window.removeEventListener('question-status-updated', refreshStats);
+    };
   }, []);
 
   const fetchStats = async () => {
@@ -52,13 +58,19 @@ const Dashboard = () => {
       }
 
       const getStatus = (question) => {
-        const savedStatus = userStatuses[question._serial]
-          ?? userStatuses[`${question.bookId}-${question.id}`];
-        return savedStatus || question.status || (question.solved ? 'solved' : 'unsolved');
+        const serialKey = question._serial;
+        const compoundKey = `${question.bookId}-${question.id}`;
+        const hasSavedStatus = Object.prototype.hasOwnProperty.call(userStatuses, serialKey)
+          || Object.prototype.hasOwnProperty.call(userStatuses, compoundKey);
+        const savedStatus = userStatuses[serialKey] ?? userStatuses[compoundKey];
+
+        if (hasSavedStatus) return savedStatus;
+        if (question.solved === true || question.solved === 'true') return 'solved';
+        if (question.status === 'solved' || question.status === 'revision') return question.status;
+        return 'unsolved';
       };
 
       const chapterCounts = {};
-      const difficultyCounts = {};
       let solvedQuestions = 0;
       let revisionCount = 0;
 
@@ -70,8 +82,6 @@ const Dashboard = () => {
         const chapter = question.chapter || 'Uncategorized';
         chapterCounts[chapter] = (chapterCounts[chapter] || 0) + 1;
 
-        const difficulty = question.difficulty || 'Not tagged';
-        difficultyCounts[difficulty] = (difficultyCounts[difficulty] || 0) + 1;
       });
 
       setStats({
@@ -82,8 +92,6 @@ const Dashboard = () => {
           .map(([_id, count]) => ({ _id, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 10),
-        difficultyStats: Object.entries(difficultyCounts)
-          .map(([_id, count]) => ({ _id, count }))
       });
     } catch (error) {
       toast.error('Failed to fetch statistics');
@@ -106,13 +114,15 @@ const Dashboard = () => {
     );
   }
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-  
-  const DIFFICULTY_COLORS = {
-    'Easy': '#10b981',
-    'Medium': '#f59e0b', 
-    'Hard': '#ef4444'
+  const formatTopicLabel = (topic) => {
+    if (!topic) return 'Uncategorized';
+    return topic.length > 23 ? `${topic.slice(0, 21).trim()}…` : topic;
   };
+  const totalQuestions = stats?.totalQuestions || 0;
+  const solvedQuestions = stats?.solvedQuestions || 0;
+  const revisionQuestions = stats?.revisionCount || 0;
+  const completion = totalQuestions ? Math.round((solvedQuestions / totalQuestions) * 100) : 0;
+  const remainingQuestions = Math.max(totalQuestions - solvedQuestions, 0);
 
   // Enhanced Stat Card Component
   const StatCard = ({ title, value, subtitle, icon: Icon, gradient, link, trend }) => (
@@ -248,7 +258,7 @@ const Dashboard = () => {
           value={`${stats?.totalQuestions ? Math.round(((stats?.solvedQuestions || 0) / stats.totalQuestions) * 100) : 0}%`}
           subtitle="Overall book progress"
           icon={Award}
-          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
+          gradient="bg-gradient-to-br from-primary-500 to-primary-700"
         />
       </div>
 
@@ -263,30 +273,41 @@ const Dashboard = () => {
             </h3>
           </div>
           {stats?.topicStats && stats.topicStats.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stats.topicStats} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                <XAxis type="number" stroke="#9ca3af" fontSize={12} />
+            <ResponsiveContainer width="100%" height={Math.max(340, stats.topicStats.length * 38)}>
+              <BarChart
+                data={stats.topicStats}
+                layout="vertical"
+                margin={{ top: 4, right: 12, bottom: 4, left: 8 }}
+                barCategoryGap="24%"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  stroke="var(--text-secondary)"
+                  fontSize={11}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
                 <YAxis 
                   dataKey="_id" 
                   type="category"
-                  width={100}
-                  stroke="#9ca3af"
-                  fontSize={12}
+                  width={142}
+                  stroke="var(--text-secondary)"
+                  fontSize={11}
                   tickLine={false}
+                  axisLine={false}
+                  tickFormatter={formatTopicLabel}
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip
+                  content={<CustomTooltip />}
+                  cursor={{ fill: 'var(--soft-green)', opacity: 0.45 }}
+                />
                 <Bar 
                   dataKey="count" 
-                  fill="url(#colorGradient)" 
-                  radius={[0, 4, 4, 0]}
+                  fill="var(--accent)"
+                  radius={[0, 5, 5, 0]}
                 />
-                <defs>
-                  <linearGradient id="colorGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#3b82f6" />
-                    <stop offset="100%" stopColor="#06b6d4" />
-                  </linearGradient>
-                </defs>
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -300,72 +321,52 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Difficulty Distribution */}
-        <div className="card">
+        {/* Study Overview */}
+        <div className="card study-overview-card">
           <div className="flex items-center justify-between mb-6">
             <h3 className="section-title">
-              <Award className="w-5 h-5 text-primary-500" />
-              Difficulty Breakdown
+              <Target className="w-5 h-5 text-primary-500" />
+              Study overview
             </h3>
+            <span className="overview-kicker">Your momentum</span>
           </div>
-          {stats?.difficultyStats && stats.difficultyStats.length > 0 ? (
-            <div className="flex items-center gap-8">
-              <ResponsiveContainer width="50%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={stats.difficultyStats}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="count"
-                  >
-                    {stats.difficultyStats.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={DIFFICULTY_COLORS[entry._id] || COLORS[index % COLORS.length]}
-                        strokeWidth={0}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-4">
-                {stats.difficultyStats.map((item, index) => {
-                  const total = stats.difficultyStats.reduce((acc, curr) => acc + curr.count, 0);
-                  const percentage = ((item.count / total) * 100).toFixed(0);
-                  return (
-                    <div key={item._id} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {item._id}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          {item.count} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ 
-                            width: `${percentage}%`,
-                            backgroundColor: DIFFICULTY_COLORS[item._id]
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+
+          <div className="overview-progress">
+            <div className="overview-progress-heading">
+              <div>
+                <span className="muted-label">Overall completion</span>
+                <strong>{completion}%</strong>
               </div>
+              <span>{solvedQuestions} of {totalQuestions} solved</span>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <Award className="w-12 h-12 mb-3 opacity-50" />
-              <p>No data available yet</p>
+            <div className="overview-track">
+              <span style={{ width: `${completion}%` }} />
             </div>
-          )}
+          </div>
+
+          <div className="overview-stats">
+            <div><strong>{solvedQuestions}</strong><span>Solved</span></div>
+            <div><strong>{revisionQuestions}</strong><span>Revision</span></div>
+            <div><strong>{remainingQuestions}</strong><span>To explore</span></div>
+          </div>
+
+          <div className="overview-focus">
+            <div className="flex items-center justify-between mb-3">
+              <span className="muted-label">Top focus areas</span>
+              <Link to="/app/books" className="text-xs text-primary-600 dark:text-primary-400 font-medium">View books</Link>
+            </div>
+            {stats?.topicStats?.length ? (
+              stats.topicStats.slice(0, 3).map((topic, index) => (
+                <div className="focus-row" key={topic._id}>
+                  <span className="focus-index">0{index + 1}</span>
+                  <span className="focus-name">{formatTopicLabel(topic._id)}</span>
+                  <span className="focus-count">{topic.count}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">Start solving questions to see your focus areas.</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -384,7 +385,7 @@ const Dashboard = () => {
             icon={BookOpen}
             title="Interactive DSA Books"
             description="Explore chapters & patterns"
-            gradient="bg-gradient-to-br from-violet-500 to-indigo-600"
+            gradient="bg-gradient-to-br from-primary-500 to-primary-700"
           />
           <QuickActionCard
             to="/app/profile"

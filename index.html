@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <script>
+      try {
+        if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');
+      } catch (error) {
+        // ThemeProvider remains the source of truth if storage is unavailable.
+      }
+    </script>
+    <title>DSA Tracker</title>
   </head>
   <body>
     <div id="root"></div>

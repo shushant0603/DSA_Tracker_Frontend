@@ -88,6 +88,7 @@ const QuestionsList = () => {
     setUserStatuses(updated);
     try {
       localStorage.setItem('dsa_user_question_statuses', JSON.stringify(updated));
+      window.dispatchEvent(new Event('question-status-updated'));
     } catch (err) {
       console.error(err);
     }
@@ -263,7 +264,7 @@ const QuestionsList = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="questions-page min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-600 dark:text-gray-400 font-medium">Loading DSA Books...</p>
@@ -273,7 +274,7 @@ const QuestionsList = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col">
+    <div className="questions-page min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col">
       
       {/* 🌟 TOP NAVIGATION BAR (LIKE PLAYGROUND) */}
       <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 px-4 flex items-center justify-between shadow-sm">
@@ -297,7 +298,7 @@ const QuestionsList = () => {
           <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
 
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-sm shadow-violet-500/20">
+            <div className="p-2 rounded-xl bg-primary-600 text-white shadow-sm">
               <BookMarked className="w-4 h-4" />
             </div>
             <div>
@@ -328,7 +329,7 @@ const QuestionsList = () => {
             className="p-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-violet-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-all flex items-center gap-1.5"
             title="Profile & Settings"
           >
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-6 h-6 rounded-lg bg-primary-600 flex items-center justify-center text-white text-xs font-bold">
               {user?.name ? user.name[0].toUpperCase() : <User className="w-3.5 h-3.5" />}
             </div>
           </button>
@@ -351,7 +352,7 @@ const QuestionsList = () => {
                   onClick={() => setSelectedBookId(b.id)}
                   className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
                     isSelected
-                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-violet-600 shadow-md shadow-violet-500/25 scale-[1.02]'
+                      ? 'bg-primary-600 text-white border-primary-600 shadow-md scale-[1.02]'
                       : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-violet-400 dark:hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/20'
                   }`}
                 >
@@ -419,7 +420,7 @@ const QuestionsList = () => {
                 </div>
                 <div className="w-full bg-gray-700/60 rounded-full h-2.5 overflow-hidden">
                   <div 
-                    className="bg-gradient-to-r from-violet-400 to-indigo-400 h-full rounded-full transition-all duration-500" 
+                    className="bg-primary-400 h-full rounded-full transition-all duration-500" 
                     style={{ width: `${currentBookStats.percent}%` }}
                   />
                 </div>

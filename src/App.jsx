@@ -49,7 +49,7 @@ function App() {
             v7_relativeSplatPath: true,
           }}
         >
-          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <div className="app-root min-h-screen">
             <Toaster
               position="top-center"
               toastOptions={{
