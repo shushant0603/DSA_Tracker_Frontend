@@ -28,12 +28,15 @@ import {
   Sun,
   Moon,
   User,
-  Home
+  Home,
+  CalendarClock,
+  X
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { addRevision, removeQuestionRevision } from '../services/revision';
 
 // Icon mapper for books
 const getBookIcon = (iconName) => {
@@ -53,6 +56,7 @@ const QuestionsList = () => {
   const navigate = useNavigate();
   const { darkMode, toggleDarkMode } = useTheme();
   const { user } = useAuth();
+  const statusStorageKey = `dsa_user_question_statuses:${user?.id || user?._id || 'anonymous'}`;
 
   const [books, setBooks] = useState([]);
   const [selectedBookId, setSelectedBookId] = useState('book-1');
@@ -65,37 +69,111 @@ const QuestionsList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, solved, revision, unsolved
   const [collapsedSections, setCollapsedSections] = useState({});
+  const [revisionQuestion, setRevisionQuestion] = useState(null);
+  const [revisionInterval, setRevisionInterval] = useState('3');
+  const [revisionDate, setRevisionDate] = useState('');
+  const [revisionTime, setRevisionTime] = useState('18:00');
+  const [repeatRevision, setRepeatRevision] = useState(true);
+  const [revisionRepeatCount, setRevisionRepeatCount] = useState('');
+  const [savingRevision, setSavingRevision] = useState(false);
+
+  const getToday = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  };
 
   // Local storage for user overrides (solved, revision)
   const [userStatuses, setUserStatuses] = useState(() => {
     try {
-      const saved = localStorage.getItem('dsa_user_question_statuses');
+      const saved = localStorage.getItem(statusStorageKey);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
     }
   });
 
-  // Save overrides to localStorage
-  const handleStatusChange = (questionId, currentStatus, e) => {
-    e.stopPropagation();
-    let nextStatus = 'solved';
-    if (currentStatus === 'solved') nextStatus = 'revision';
-    else if (currentStatus === 'revision') nextStatus = 'unsolved';
-    else nextStatus = 'solved';
-
-    const updated = { ...userStatuses, [questionId]: nextStatus };
-    setUserStatuses(updated);
+  useEffect(() => {
     try {
-      localStorage.setItem('dsa_user_question_statuses', JSON.stringify(updated));
-      window.dispatchEvent(new Event('question-status-updated'));
-    } catch (err) {
-      console.error(err);
+      // Remove the legacy shared key so statuses from another account cannot be reused.
+      localStorage.removeItem('dsa_user_question_statuses');
+      const saved = localStorage.getItem(statusStorageKey);
+      setUserStatuses(saved ? JSON.parse(saved) : {});
+    } catch (error) {
+      console.error('Error loading user question statuses:', error);
+      setUserStatuses({});
+    }
+  }, [statusStorageKey]);
+
+  // Save overrides to localStorage
+  const handleStatusChange = async (questionId, currentStatus, e) => {
+    e.stopPropagation();
+    if (currentStatus === 'solved') {
+      const question = bookData?.chapters
+        .flatMap((chapter) => chapter.sections.flatMap((section) => section.questions))
+        .find((item) => item._serial === questionId);
+      setRevisionQuestion(question);
+      setRevisionInterval('3');
+      setRevisionDate(getToday());
+      setRevisionTime('18:00');
+      setRepeatRevision(true);
+      setRevisionRepeatCount('');
+      return;
     }
 
-    if (nextStatus === 'solved') toast.success('Marked as Solved! 🎉', { duration: 1500 });
-    else if (nextStatus === 'revision') toast('Marked for Revision 🧐', { icon: '🧐', duration: 1500 });
-    else toast('Marked as Unsolved', { icon: '⬜', duration: 1500 });
+    const nextStatus = currentStatus === 'revision' ? 'unsolved' : 'solved';
+    try {
+      if (currentStatus === 'revision') {
+        await removeQuestionRevision(questionId);
+      }
+      const updated = { ...userStatuses, [questionId]: nextStatus };
+      setUserStatuses(updated);
+      localStorage.setItem(statusStorageKey, JSON.stringify(updated));
+      window.dispatchEvent(new Event('question-status-updated'));
+      toast.success(nextStatus === 'solved' ? 'Marked as Solved! 🎉' : 'Marked as Unsolved', { duration: 1500 });
+      window.dispatchEvent(new Event('revision-updated'));
+    } catch (error) {
+      console.error('Error updating question status:', error);
+      toast.error(error.response?.data?.message || 'Could not update question');
+    }
+  };
+
+  const confirmRevision = async () => {
+    const intervalDays = Number(revisionInterval);
+    if (!revisionQuestion || !revisionDate || !revisionTime ||
+      !Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 365) {
+      toast.error('Enter a valid date, time and interval');
+      return;
+    }
+    if (repeatRevision && revisionRepeatCount &&
+      (!Number.isInteger(Number(revisionRepeatCount)) ||
+        Number(revisionRepeatCount) < 1 || Number(revisionRepeatCount) > 365)) {
+      toast.error('Repeat count must be between 1 and 365');
+      return;
+    }
+
+    try {
+      setSavingRevision(true);
+      await addRevision(revisionQuestion._serial, {
+        intervalDays,
+        preferredTime: revisionTime,
+        repeatEnabled: repeatRevision,
+        repeatCount: repeatRevision && revisionRepeatCount ? Number(revisionRepeatCount) : null,
+        nextRevisionDate: new Date(`${revisionDate}T${revisionTime}`).toISOString()
+      });
+      const updated = { ...userStatuses, [revisionQuestion._serial]: 'revision' };
+      setUserStatuses(updated);
+      localStorage.setItem(statusStorageKey, JSON.stringify(updated));
+      window.dispatchEvent(new Event('question-status-updated'));
+      window.dispatchEvent(new Event('revision-updated'));
+      setRevisionQuestion(null);
+      toast('Added to revision schedule 🧐', { icon: '🧐', duration: 1800 });
+    } catch (error) {
+      console.error('Error saving revision:', error);
+      toast.error(error.response?.data?.message || 'Could not save revision');
+    } finally {
+      setSavingRevision(false);
+    }
   };
 
   // Fetch all books metadata
@@ -142,8 +220,7 @@ const QuestionsList = () => {
   const getQuestionStatus = (q) => {
     if (userStatuses[q._serial] !== undefined) return userStatuses[q._serial];
     if (userStatuses[`${selectedBookId}-${q.id}`] !== undefined) return userStatuses[`${selectedBookId}-${q.id}`];
-    if (q.status) return q.status;
-    return q.solved ? 'solved' : 'unsolved';
+    return 'unsolved';
   };
 
   // Toggle section collapse
@@ -269,6 +346,7 @@ const QuestionsList = () => {
           <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-600 dark:text-gray-400 font-medium">Loading DSA Books...</p>
         </div>
+
       </div>
     );
   }
@@ -789,6 +867,122 @@ const QuestionsList = () => {
           </div>
         </div>
       </div>
+      {revisionQuestion && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-amber-500">
+                  <CalendarClock className="w-5 h-5" />
+                  <span className="text-sm font-semibold">Add to revision</span>
+                </div>
+                <h2 className="mt-2 text-lg font-bold text-gray-900 dark:text-white">{revisionQuestion.title}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Choose when you want to see this question again.
+                </p>
+              </div>
+              <button onClick={() => setRevisionQuestion(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close revision dialog">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Next revision date
+                <input
+                  type="date"
+                  value={revisionDate}
+                  onChange={(event) => setRevisionDate(event.target.value)}
+                  className="input-field mt-2"
+                  required
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Revision time
+                <input
+                  type="time"
+                  value={revisionTime}
+                  onChange={(event) => setRevisionTime(event.target.value)}
+                  className="input-field mt-2"
+                  required
+                />
+              </label>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Repeat after
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[1, 3, 7, 14, 30].map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setRevisionInterval(String(days))}
+                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${
+                    revisionInterval === String(days)
+                      ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'border-gray-200 text-gray-600 hover:border-primary-300 dark:border-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {days} {days === 1 ? 'day' : 'days'}
+                </button>
+              ))}
+              <label className="rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                Custom days
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={revisionInterval}
+                  onChange={(event) => setRevisionInterval(event.target.value)}
+                  className="mt-1 w-full bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={repeatRevision}
+                  onChange={(event) => setRepeatRevision(event.target.checked)}
+                  className="h-4 w-4 accent-primary-600"
+                />
+                Repeat this revision
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                Turn off for a one-time revision.
+              </p>
+              {repeatRevision && (
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">
+                  Number of repetitions
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    placeholder="Unlimited"
+                    value={revisionRepeatCount}
+                    onChange={(event) => setRevisionRepeatCount(event.target.value)}
+                    className="input-field mt-2"
+                  />
+                  <span className="text-xs font-normal text-gray-500">
+                    Leave blank for unlimited repetitions.
+                  </span>
+                </label>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setRevisionQuestion(null)} className="btn-secondary" disabled={savingRevision}>Cancel</button>
+              <button onClick={confirmRevision} className="btn-primary" disabled={savingRevision}>
+                {savingRevision ? 'Saving...' : 'Add to revision'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

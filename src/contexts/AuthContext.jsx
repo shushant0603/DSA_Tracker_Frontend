@@ -66,27 +66,44 @@ export const AuthProvider = ({ children }) => {
 
   // Check for existing token on app load
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user');
-    
-    if (token && user) {
-      try {
+    const restoreUser = async () => {
+      const token = localStorage.getItem('token');
+      const user = localStorage.getItem('user');
+
+      if (token && user) {
+        try {
         const parsedUser = JSON.parse(user);
         dispatch({
           type: 'LOGIN_SUCCESS',
           payload: { user: parsedUser, token },
         });
-      } catch (error) {
+
+        const response = await api.get('/user/profile');
+        const freshUser = response.data.user;
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        dispatch({
+          type: 'UPDATE_USER',
+          payload: freshUser,
+        });
+        } catch (error) {
+          console.error('Error restoring user profile:', error);
+          if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            dispatch({ type: 'LOGOUT' });
+          } else {
+            dispatch({ type: 'LOGIN_SUCCESS', payload: { user: JSON.parse(user), token } });
+          }
+        }
+      } else {
+        // Clear any corrupted localStorage data
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         dispatch({ type: 'LOGOUT' });
       }
-    } else {
-      // Clear any corrupted localStorage data
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      dispatch({ type: 'LOGOUT' });
-    }
+    };
+
+    restoreUser();
   }, []);
 
   const login = async (email, password) => {

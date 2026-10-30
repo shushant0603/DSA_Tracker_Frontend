@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import QuestionsList from './pages/QuestionsList';
 import Profile from './pages/Profile';
 import HomeRoute from './pages/HomeRoute';
+import Revision from './pages/Revision';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -107,6 +108,7 @@ function App() {
                  {/* Default child route */}
                 <Route index element={<Navigate to="/app/dashboard" replace/>} />
                 <Route path="dashboard" element={<Dashboard />} />
+                <Route path="revision" element={<Revision />} />
                 <Route path="profile" element={<Profile />} />
               </Route>
               {/* Catch-all for undefined routes */}

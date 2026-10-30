@@ -126,16 +126,25 @@ const Profile = () => {
     setPlatformLoading(true);
 
     try {
-      const dataToUpdate = {};
-      if (platformUsernames.github) dataToUpdate.github = platformUsernames.github;
-      if (platformUsernames.leetcode) dataToUpdate.leetcode = platformUsernames.leetcode;
-      if (platformUsernames.codeforces) dataToUpdate.codeforces = platformUsernames.codeforces;
+      const dataToUpdate = {
+        github: platformUsernames.github.trim(),
+        leetcode: platformUsernames.leetcode.trim(),
+        codeforces: platformUsernames.codeforces.trim()
+      };
 
       await updatePlatformUsernames(dataToUpdate);
       toast.success('Platform usernames updated!');
       fetchPlatformData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update usernames');
+      if (error.response?.data?.validationResults) {
+        Object.entries(error.response.data.validationResults).forEach(([platform, result]) => {
+          if (!result.valid) {
+            toast.error(`${platform}: ${result.error}`);
+          }
+        });
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to update usernames');
+      }
     } finally {
       setPlatformLoading(false);
     }

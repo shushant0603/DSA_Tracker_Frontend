@@ -27,10 +27,13 @@ import {
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import PlatformStats from '../components/platform/PlatformStats';
+import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const statusStorageKey = `dsa_user_question_statuses:${user?.id || user?._id || 'anonymous'}`;
 
   useEffect(() => {
     fetchStats();
@@ -43,7 +46,7 @@ const Dashboard = () => {
       window.removeEventListener('storage', refreshStats);
       window.removeEventListener('question-status-updated', refreshStats);
     };
-  }, []);
+  }, [statusStorageKey]);
 
   const fetchStats = async () => {
     try {
@@ -52,7 +55,7 @@ const Dashboard = () => {
       let userStatuses = {};
 
       try {
-        userStatuses = JSON.parse(localStorage.getItem('dsa_user_question_statuses') || '{}');
+        userStatuses = JSON.parse(localStorage.getItem(statusStorageKey) || '{}');
       } catch (error) {
         console.error('Error reading saved question statuses:', error);
       }
@@ -65,8 +68,6 @@ const Dashboard = () => {
         const savedStatus = userStatuses[serialKey] ?? userStatuses[compoundKey];
 
         if (hasSavedStatus) return savedStatus;
-        if (question.solved === true || question.solved === 'true') return 'solved';
-        if (question.status === 'solved' || question.status === 'revision') return question.status;
         return 'unsolved';
       };
 

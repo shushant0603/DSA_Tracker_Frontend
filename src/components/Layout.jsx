@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,22 +14,56 @@ import {
   Code2,
   ChevronRight,
   Sparkles,
-  BookOpen
+  BookOpen,
+  CalendarClock,
+  Bell
 } from 'lucide-react';
+import { getRevisionSummary } from '../services/revision';
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const location = useLocation();
+  const [revisionSummary, setRevisionSummary] = useState(null);
+  const [showRevisionNotice, setShowRevisionNotice] = useState(false);
 
   const navigation = [
     { name: 'Dashboard', href: '/app/dashboard', icon: Home, description: 'Overview & stats' },
     { name: 'DSA Books', href: '/app/books', icon: BookOpen, description: 'Chapters & Patterns' },
+    { name: 'Revision', href: '/app/revision', icon: CalendarClock, description: 'Due questions' },
     { name: 'Profile', href: '/app/profile', icon: User, description: 'Account settings' },
   ];
 
   const isActive = (path) => location.pathname === path;
+
+  useEffect(() => {
+    const fetchRevisionSummary = async () => {
+      try {
+        const response = await getRevisionSummary();
+        const summary = response.data;
+        setRevisionSummary(summary);
+        const today = new Date().toISOString().slice(0, 10);
+        const dismissedOn = localStorage.getItem('revision-notice-dismissed-on');
+        setShowRevisionNotice(summary.totalDue > 0 && dismissedOn !== today);
+      } catch (error) {
+        console.error('Error fetching revision notification:', error);
+      }
+    };
+
+    fetchRevisionSummary();
+    window.addEventListener('focus', fetchRevisionSummary);
+    window.addEventListener('revision-updated', fetchRevisionSummary);
+    return () => {
+      window.removeEventListener('focus', fetchRevisionSummary);
+      window.removeEventListener('revision-updated', fetchRevisionSummary);
+    };
+  }, []);
+
+  const dismissRevisionNotice = () => {
+    localStorage.setItem('revision-notice-dismissed-on', new Date().toISOString().slice(0, 10));
+    setShowRevisionNotice(false);
+  };
 
   const NavLink = ({ item, mobile = false }) => {
     const Icon = item.icon;
@@ -164,6 +198,16 @@ const Layout = () => {
             <div className="flex flex-1" />
             <div className="flex items-center gap-x-3">
               {/* Theme toggle */}
+              <Link
+                to="/app/revision"
+                className="relative p-2.5 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                title="Revision notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {revisionSummary?.totalDue > 0 && (
+                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-amber-500" />
+                )}
+              </Link>
               <button
                 onClick={toggleDarkMode}
                 className="p-2.5 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -204,6 +248,26 @@ const Layout = () => {
         </div>
 
         {/* Page content */}
+        {showRevisionNotice && (
+          <div className="fixed top-20 right-4 z-50 w-[min(calc(100vw-2rem),24rem)] card border-l-4 border-amber-500 shadow-xl">
+            <div className="flex items-start gap-3">
+              <Bell className="w-5 h-5 mt-0.5 text-amber-500 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900 dark:text-white">Today's revision</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {revisionSummary.due} due today
+                  {revisionSummary.overdue > 0 && ` · ${revisionSummary.overdue} overdue`}
+                </p>
+                <Link to="/app/revision" onClick={dismissRevisionNotice} className="inline-block mt-3 btn-primary text-sm py-2 px-3">
+                  Start revision
+                </Link>
+              </div>
+              <button onClick={dismissRevisionNotice} className="text-gray-400 hover:text-gray-600" aria-label="Dismiss revision notification">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
         <main className="py-8">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Outlet />

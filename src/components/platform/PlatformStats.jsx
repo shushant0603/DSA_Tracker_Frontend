@@ -192,9 +192,17 @@ const GitHubCard = ({ stats }) => {
   if (stats.error) {
     return (
       <div className="card border-l-4 border-red-500">
-        <div className="flex items-center gap-3 text-red-500">
-          <AlertCircle className="w-5 h-5" />
-          <span>{stats.error}</span>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: '#24292f' }}
+          >
+            <Github className="w-5 h-5" style={{ color: '#ffffff' }} />
+          </div>
+          <div className="flex items-center gap-2 text-red-500">
+            <AlertCircle className="w-5 h-5" />
+            <span>{stats.error}</span>
+          </div>
         </div>
       </div>
     );
@@ -204,8 +212,11 @@ const GitHubCard = ({ stats }) => {
     <div className="card card-hover group">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gray-900 dark:bg-gray-700 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-            <Github className="w-6 h-6 text-white" />
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300"
+            style={{ backgroundColor: '#24292f' }}
+          >
+            <Github className="w-6 h-6" style={{ color: '#ffffff' }} />
           </div>
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-white">GitHub</h3>
