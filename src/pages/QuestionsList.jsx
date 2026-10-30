@@ -77,6 +77,7 @@ const QuestionsList = () => {
   const [revisionRepeatCount, setRevisionRepeatCount] = useState('');
   const [savingRevision, setSavingRevision] = useState(false);
 
+
   const getToday = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
@@ -470,11 +471,11 @@ const QuestionsList = () => {
       </div>
 
       {/* 📖 MAIN BOOK BODY */}
-      <div className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+      <div className="reader-workspace max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
         
         {/* Book Hero Card */}
-        {activeBookMeta && (
-          <div className="mb-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-950 text-white shadow-xl relative overflow-hidden border border-gray-700">
+        {!darkMode && activeBookMeta && (
+          <div className="reader-light-hero mb-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-950 text-white shadow-xl relative overflow-hidden border border-gray-700">
             <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 rounded-full bg-violet-600/20 blur-3xl pointer-events-none"></div>
             
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -521,11 +522,35 @@ const QuestionsList = () => {
           </div>
         )}
 
+        {darkMode && activeBookMeta && (
+          <div className="reader-book-header">
+            <div className="min-w-0">
+              <p className="reader-eyebrow">Selected practice book</p>
+              <h2>{activeBookMeta.name || activeBookMeta.shortTitle}</h2>
+              <p>{activeBookMeta.description || 'Master algorithmic patterns and problem archetypes in this volume.'}</p>
+            </div>
+            <div className="reader-book-progress">
+              <div className="reader-book-progress-top">
+                <strong>{currentBookStats.percent}%</strong>
+                <span>complete</span>
+              </div>
+              <div className="reader-progress-track">
+                <span style={{ width: `${currentBookStats.percent}%` }} />
+              </div>
+              <div className="reader-book-metrics">
+                <span><b>{currentBookStats.solved}</b> solved</span>
+                <span><b>{currentBookStats.revision}</b> revision</span>
+                <span><b>{Math.max(currentBookStats.total - currentBookStats.solved, 0)}</b> remaining</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 📑 TWO-COLUMN LAYOUT: Chapter Sidebar & Question Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="reader-layout grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* 👈 LEFT SIDEBAR: CHAPTERS / TOC */}
-          <div className="lg:col-span-3 space-y-4 lg:sticky lg:top-40">
+          <div className="reader-chapter-sidebar lg:col-span-3 space-y-4 lg:sticky lg:top-40">
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700 mb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">

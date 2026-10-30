@@ -109,7 +109,7 @@ const Layout = () => {
           className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm" 
           onClick={() => setSidebarOpen(false)} 
         />
-        <div className={`fixed inset-y-0 left-0 w-72 bg-white dark:bg-gray-800 shadow-2xl transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className={`app-sidebar fixed inset-y-0 left-0 w-72 shadow-2xl transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex h-16 items-center justify-between px-4 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-gradient-to-br from-primary-500 to-cyan-500">
@@ -136,9 +136,9 @@ const Layout = () => {
 
       {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-72 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700/50">
+        <div className="app-sidebar flex flex-col flex-grow border-r">
           {/* Logo */}
-          <div className="flex h-16 items-center gap-3 px-5 border-b border-gray-100 dark:border-gray-700/50">
+          <div className="app-topbar flex h-16 items-center gap-3 px-5 border-b">
             <div className="p-2 rounded-xl bg-gradient-to-br from-primary-500 to-cyan-500 shadow-lg shadow-primary-500/25">
               <Code2 className="h-5 w-5 text-white" />
             </div>
@@ -162,7 +162,7 @@ const Layout = () => {
 
           {/* User section */}
           <div className="p-4 border-t border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+            <div className="app-user-card flex items-center gap-3 p-3 rounded-xl">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-cyan-500 flex items-center justify-center text-white font-semibold text-sm">
                 {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
@@ -182,7 +182,7 @@ const Layout = () => {
       {/* Main content */}
       <div className="lg:pl-72">
         {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-100 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl px-4 sm:px-6 lg:px-8">
+        <div className="app-topbar sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b backdrop-blur-xl px-4 sm:px-6 lg:px-8">
           <button
             type="button"
             className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden transition-colors"

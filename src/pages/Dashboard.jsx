@@ -236,7 +236,7 @@ const Dashboard = () => {
           value={stats?.totalQuestions || 0}
           subtitle="Problems solved"
           icon={Target}
-          gradient="bg-gradient-to-br from-primary-500 to-primary-600"
+          gradient="bg-gradient-to-br from-primary-500 to-primary-600 dashboard-gradient-green"
           link="/app/books"
         />
         <StatCard
@@ -244,7 +244,7 @@ const Dashboard = () => {
           value={stats?.revisionCount || 0}
           subtitle="Review pending"
           icon={RotateCcw}
-          gradient="bg-gradient-to-br from-amber-500 to-orange-500"
+          gradient="bg-gradient-to-br from-amber-500 to-orange-500 dashboard-gradient-orange"
           link="/app/books"
         />
         <StatCard
@@ -252,14 +252,14 @@ const Dashboard = () => {
           value={stats?.solvedQuestions || 0}
           subtitle="Across all DSA books"
           icon={Calendar}
-          gradient="bg-gradient-to-br from-emerald-500 to-teal-500"
+          gradient="bg-gradient-to-br from-emerald-500 to-teal-500 dashboard-gradient-blue"
         />
         <StatCard
           title="Completion"
           value={`${stats?.totalQuestions ? Math.round(((stats?.solvedQuestions || 0) / stats.totalQuestions) * 100) : 0}%`}
           subtitle="Overall book progress"
           icon={Award}
-          gradient="bg-gradient-to-br from-primary-500 to-primary-700"
+          gradient="bg-gradient-to-br from-primary-500 to-primary-700 dashboard-gradient-purple"
         />
       </div>
 
