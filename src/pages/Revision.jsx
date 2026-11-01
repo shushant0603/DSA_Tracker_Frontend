@@ -8,6 +8,7 @@ import {
   removeRevision,
   updateRevision
 } from '../services/revision';
+import { useAppStore } from '../store/appStore';
 
 const formatDateTime = (date) => new Date(date).toLocaleString([], {
   dateStyle: 'medium',
@@ -22,8 +23,13 @@ const toTimeInput = (date, preferredTime) =>
   preferredTime || new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
 const Revision = () => {
-  const [due, setDue] = useState([]);
-  const [upcoming, setUpcoming] = useState([]);
+  const {
+    userCache,
+    setRevisionLists,
+    invalidateRevisionLists,
+  } = useAppStore();
+  const [due, setDue] = useState(userCache.dueRevisions || []);
+  const [upcoming, setUpcoming] = useState(userCache.upcomingRevisions || []);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -36,15 +42,27 @@ const Revision = () => {
     platform: 'all'
   });
 
-  const fetchRevisions = async () => {
+  const fetchRevisions = async (force = false) => {
+    const cacheIsFresh = !force && userCache.dueRevisions &&
+      userCache.upcomingRevisions &&
+      Date.now() - userCache.revisionsFetchedAt < 5 * 60 * 1000;
+    if (cacheIsFresh) {
+      setDue(userCache.dueRevisions);
+      setUpcoming(userCache.upcomingRevisions);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const [dueResponse, upcomingResponse] = await Promise.all([
         getDueRevisions(),
         getUpcomingRevisions()
       ]);
-      setDue(dueResponse.data.revisions || []);
-      setUpcoming(upcomingResponse.data.revisions || []);
+      const nextDue = dueResponse.data.revisions || [];
+      const nextUpcoming = upcomingResponse.data.revisions || [];
+      setDue(nextDue);
+      setUpcoming(nextUpcoming);
+      setRevisionLists(nextDue, nextUpcoming);
     } catch (error) {
       console.error('Error fetching revisions:', error);
       toast.error('Unable to load revisions');
@@ -55,13 +73,14 @@ const Revision = () => {
 
   useEffect(() => {
     fetchRevisions();
-  }, []);
+  }, [userCache.dueRevisions, userCache.upcomingRevisions, userCache.revisionsFetchedAt]);
 
   const handleReview = async (revisionId, result) => {
     try {
       await reviewRevision(revisionId, result);
       toast.success('Review saved');
-      fetchRevisions();
+      invalidateRevisionLists();
+      fetchRevisions(true);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to save review');
     }
@@ -71,7 +90,8 @@ const Revision = () => {
     try {
       await removeRevision(revisionId);
       toast.success('Removed from revision');
-      fetchRevisions();
+      invalidateRevisionLists();
+      fetchRevisions(true);
     } catch (error) {
       toast.error('Unable to remove revision');
     }
@@ -110,7 +130,8 @@ const Revision = () => {
       });
       setEditing(null);
       toast.success('Revision schedule updated');
-      fetchRevisions();
+      invalidateRevisionLists();
+      fetchRevisions(true);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unable to update schedule');
     } finally {

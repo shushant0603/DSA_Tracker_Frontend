@@ -17,29 +17,48 @@ import {
   BookOpen,
   CalendarClock,
   Bell
+  ,StickyNote
 } from 'lucide-react';
 import { getRevisionSummary } from '../services/revision';
+import { useAppStore } from '../store/appStore';
 
 const Layout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const location = useLocation();
-  const [revisionSummary, setRevisionSummary] = useState(null);
+  const {
+    sidebarOpen,
+    setSidebarOpen,
+    userCache,
+    setRevisionSummary,
+    invalidateRevisionSummary,
+  } = useAppStore();
+  const revisionSummary = userCache.revisionSummary;
   const [showRevisionNotice, setShowRevisionNotice] = useState(false);
 
   const navigation = [
     { name: 'Dashboard', href: '/app/dashboard', icon: Home, description: 'Overview & stats' },
     { name: 'DSA Books', href: '/app/books', icon: BookOpen, description: 'Chapters & Patterns' },
     { name: 'Revision', href: '/app/revision', icon: CalendarClock, description: 'Due questions' },
+    { name: 'Notes', href: '/app/notes', icon: StickyNote, description: 'Knowledge workspace' },
     { name: 'Profile', href: '/app/profile', icon: User, description: 'Account settings' },
   ];
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) =>
+    location.pathname === path ||
+    (path === '/app/notes' && location.pathname.startsWith('/app/notes/'));
 
   useEffect(() => {
     const fetchRevisionSummary = async () => {
       try {
+        const cacheIsFresh = userCache.revisionSummary &&
+          Date.now() - userCache.revisionSummaryFetchedAt < 5 * 60 * 1000;
+        if (cacheIsFresh) {
+          const today = new Date().toISOString().slice(0, 10);
+          const dismissedOn = localStorage.getItem('revision-notice-dismissed-on');
+          setShowRevisionNotice(userCache.revisionSummary.totalDue > 0 && dismissedOn !== today);
+          return;
+        }
         const response = await getRevisionSummary();
         const summary = response.data;
         setRevisionSummary(summary);
@@ -53,12 +72,23 @@ const Layout = () => {
 
     fetchRevisionSummary();
     window.addEventListener('focus', fetchRevisionSummary);
-    window.addEventListener('revision-updated', fetchRevisionSummary);
+    const handleRevisionUpdate = () => {
+      invalidateRevisionSummary();
+      fetchRevisionSummary();
+    };
+    window.addEventListener('revision-updated', handleRevisionUpdate);
     return () => {
       window.removeEventListener('focus', fetchRevisionSummary);
-      window.removeEventListener('revision-updated', fetchRevisionSummary);
+      window.removeEventListener('revision-updated', handleRevisionUpdate);
     };
-  }, []);
+  }, [
+    invalidateRevisionSummary,
+    setRevisionSummary,
+    user?.id,
+    user?._id,
+    userCache.revisionSummary,
+    userCache.revisionSummaryFetchedAt,
+  ]);
 
   const dismissRevisionNotice = () => {
     localStorage.setItem('revision-notice-dismissed-on', new Date().toISOString().slice(0, 10));

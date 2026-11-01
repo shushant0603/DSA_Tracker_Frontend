@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   BookOpen, 
   Search, 
@@ -29,14 +29,21 @@ import {
   Moon,
   User,
   Home,
-  CalendarClock,
-  X
+  X,
+  CalendarDays,
+  History
 } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { addRevision, removeQuestionRevision } from '../services/revision';
+import { removeQuestionRevision } from '../services/revision';
+import {
+  getSolvedQuestions,
+  removeSolvedQuestion as deleteSolvedQuestion,
+  saveSolvedQuestion as persistSolvedQuestion,
+} from '../services/solvedQuestions';
+import { useAppStore } from '../store/appStore';
 
 // Icon mapper for books
 const getBookIcon = (iconName) => {
@@ -54,9 +61,21 @@ const getBookIcon = (iconName) => {
 
 const QuestionsList = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { darkMode, toggleDarkMode } = useTheme();
   const { user } = useAuth();
-  const statusStorageKey = `dsa_user_question_statuses:${user?.id || user?._id || 'anonymous'}`;
+  const {
+    userCache,
+    setBooks: setCachedBooks,
+    setBookData: setCachedBookData,
+    setQuestionStatus,
+    setQuestionStatuses,
+    setQuestionRecords,
+    saveQuestionRecord,
+    removeQuestionRecord,
+    invalidateDashboardStats,
+  } = useAppStore();
+  const userId = user?.id || user?._id;
 
   const [books, setBooks] = useState([]);
   const [selectedBookId, setSelectedBookId] = useState('book-1');
@@ -68,124 +87,153 @@ const QuestionsList = () => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, solved, revision, unsolved
+  const [showSolvedHistory, setShowSolvedHistory] = useState(false);
+  const [solvedDateFilter, setSolvedDateFilter] = useState('');
+  const [solvedDayFilter, setSolvedDayFilter] = useState('');
   const [collapsedSections, setCollapsedSections] = useState({});
-  const [revisionQuestion, setRevisionQuestion] = useState(null);
-  const [revisionInterval, setRevisionInterval] = useState('3');
-  const [revisionDate, setRevisionDate] = useState('');
-  const [revisionTime, setRevisionTime] = useState('18:00');
-  const [repeatRevision, setRepeatRevision] = useState(true);
-  const [revisionRepeatCount, setRevisionRepeatCount] = useState('');
-  const [savingRevision, setSavingRevision] = useState(false);
-
-
-  const getToday = () => {
-    const now = new Date();
-    const offset = now.getTimezoneOffset() * 60000;
-    return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-  };
-
   // Local storage for user overrides (solved, revision)
-  const [userStatuses, setUserStatuses] = useState(() => {
-    try {
-      const saved = localStorage.getItem(statusStorageKey);
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [userStatuses, setUserStatuses] = useState(userCache.questionStatuses);
 
   useEffect(() => {
+    setUserStatuses(userCache.questionStatuses);
+  }, [userId, userCache.questionStatuses]);
+
+  useEffect(() => {
+    if (searchParams.get('view') === 'solved') setShowSolvedHistory(true);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    let cancelled = false;
+    getSolvedQuestions()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const records = data.solvedQuestions || [];
+        const recordMap = Object.fromEntries(records.map((record) => [record.questionKey, { ...record, status: 'solved' }]));
+        const revisionStatuses = Object.fromEntries(
+          Object.entries(useAppStore.getState().userCache.questionStatuses || {})
+            .filter(([, status]) => status === 'revision')
+        );
+        const solvedStatuses = Object.fromEntries(records.map((record) => [record.serial, 'solved']));
+        const statuses = { ...revisionStatuses, ...solvedStatuses };
+        setUserStatuses(statuses);
+        setQuestionStatuses(statuses);
+        setQuestionRecords(recordMap);
+      })
+      .catch((error) => {
+        console.error('Unable to load solved question records:', error);
+      });
+    return () => { cancelled = true; };
+  }, [userId, setQuestionStatuses, setQuestionRecords]);
+
+  const saveSolvedQuestion = async (question, chapterName = '', sectionName = '') => {
+    if (!question) return;
+    const statusKey = question._serial;
+    const questionKey = `${question.bookId || selectedBookId}-${question.id}`;
+    const now = new Date();
+    const previousStatus = useAppStore.getState().userCache.questionStatuses?.[statusKey] || 'unsolved';
+    const previousRecord = useAppStore.getState().userCache.questionRecords?.[questionKey];
+    const solvedAt = previousRecord?.solvedAt || now.toISOString();
+    const solvedDate = previousRecord?.solvedDate || [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    const record = {
+      bookId: selectedBookId,
+      bookTitle: activeBookMeta?.title || activeBookMeta?.name || selectedBookId,
+      questionId: question.id,
+      serial: question._serial,
+      title: question.title,
+      url: question.leetcodeUrl || question.link || null,
+      difficulty: question.difficulty || null,
+      chapter: chapterName,
+      section: sectionName || question.section || '',
+      note: question.note || '',
+      status: 'solved',
+      solvedAt,
+      solvedDate,
+      dayOfWeek: previousRecord?.dayOfWeek || now.toLocaleDateString('en-US', { weekday: 'long' }),
+    };
+    setUserStatuses((current) => ({ ...current, [statusKey]: 'solved' }));
+    setQuestionStatus(statusKey, 'solved');
+    saveQuestionRecord(questionKey, { ...record, status: 'solved' });
     try {
-      // Remove the legacy shared key so statuses from another account cannot be reused.
-      localStorage.removeItem('dsa_user_question_statuses');
-      const saved = localStorage.getItem(statusStorageKey);
-      setUserStatuses(saved ? JSON.parse(saved) : {});
+      const response = await persistSolvedQuestion(record);
+      const savedRecord = response.data.solvedQuestion || record;
+      saveQuestionRecord(questionKey, { ...savedRecord, status: 'solved' });
+      invalidateDashboardStats();
+      window.dispatchEvent(new Event('question-status-updated'));
     } catch (error) {
-      console.error('Error loading user question statuses:', error);
-      setUserStatuses({});
+      setUserStatuses((current) => ({ ...current, [statusKey]: previousStatus }));
+      setQuestionStatus(statusKey, previousStatus);
+      if (previousRecord) saveQuestionRecord(questionKey, previousRecord);
+      else removeQuestionRecord(questionKey);
+      throw error;
     }
-  }, [statusStorageKey]);
+  };
+
+  const handleQuestionOpen = (question, chapterName, sectionName) => {
+    saveSolvedQuestion(question, chapterName, sectionName).catch((error) => {
+      console.error('Unable to save solved question:', error);
+      toast.error(error.response?.data?.message || 'Could not save solved question');
+    });
+  };
 
   // Save overrides to localStorage
   const handleStatusChange = async (questionId, currentStatus, e) => {
     e.stopPropagation();
-    if (currentStatus === 'solved') {
-      const question = bookData?.chapters
-        .flatMap((chapter) => chapter.sections.flatMap((section) => section.questions))
-        .find((item) => item._serial === questionId);
-      setRevisionQuestion(question);
-      setRevisionInterval('3');
-      setRevisionDate(getToday());
-      setRevisionTime('18:00');
-      setRepeatRevision(true);
-      setRevisionRepeatCount('');
-      return;
-    }
+    const nextStatus = currentStatus === 'solved' || currentStatus === 'revision' ? 'unsolved' : 'solved';
+    const question = bookData?.chapters
+      .flatMap((chapter) => chapter.sections.flatMap((section) => section.questions))
+      .find((item) => String(item._serial) === String(questionId));
+    const chapter = bookData?.chapters.find((item) => item.sections.some((section) => section.questions.some((q) => String(q._serial) === String(questionId))));
+    const section = chapter?.sections.find((item) => item.questions.some((q) => String(q._serial) === String(questionId)));
+    const questionKey = `${question?.bookId || selectedBookId}-${question?.id ?? questionId}`;
+    const previousRecord = useAppStore.getState().userCache.questionRecords?.[questionKey];
 
-    const nextStatus = currentStatus === 'revision' ? 'unsolved' : 'solved';
     try {
-      if (currentStatus === 'revision') {
-        await removeQuestionRevision(questionId);
+
+      if (nextStatus === 'solved') {
+        await saveSolvedQuestion(question, chapter?.name || '', section?.name || '');
+        toast.success('Marked as Solved! 🎉', { duration: 1500 });
+        return;
       }
+
       const updated = { ...userStatuses, [questionId]: nextStatus };
       setUserStatuses(updated);
-      localStorage.setItem(statusStorageKey, JSON.stringify(updated));
+      setQuestionStatus(questionId, nextStatus);
+      removeQuestionRecord(questionKey);
+      if (currentStatus === 'revision') await removeQuestionRevision(questionId);
+      await deleteSolvedQuestion(questionKey);
+      invalidateDashboardStats();
       window.dispatchEvent(new Event('question-status-updated'));
-      toast.success(nextStatus === 'solved' ? 'Marked as Solved! 🎉' : 'Marked as Unsolved', { duration: 1500 });
+      toast.success('Marked as Unsolved', { duration: 1500 });
       window.dispatchEvent(new Event('revision-updated'));
     } catch (error) {
+      setUserStatuses((current) => ({ ...current, [questionId]: currentStatus }));
+      setQuestionStatus(questionId, currentStatus);
+      if (previousRecord) saveQuestionRecord(questionKey, previousRecord);
       console.error('Error updating question status:', error);
       toast.error(error.response?.data?.message || 'Could not update question');
-    }
-  };
-
-  const confirmRevision = async () => {
-    const intervalDays = Number(revisionInterval);
-    if (!revisionQuestion || !revisionDate || !revisionTime ||
-      !Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 365) {
-      toast.error('Enter a valid date, time and interval');
-      return;
-    }
-    if (repeatRevision && revisionRepeatCount &&
-      (!Number.isInteger(Number(revisionRepeatCount)) ||
-        Number(revisionRepeatCount) < 1 || Number(revisionRepeatCount) > 365)) {
-      toast.error('Repeat count must be between 1 and 365');
-      return;
-    }
-
-    try {
-      setSavingRevision(true);
-      await addRevision(revisionQuestion._serial, {
-        intervalDays,
-        preferredTime: revisionTime,
-        repeatEnabled: repeatRevision,
-        repeatCount: repeatRevision && revisionRepeatCount ? Number(revisionRepeatCount) : null,
-        nextRevisionDate: new Date(`${revisionDate}T${revisionTime}`).toISOString()
-      });
-      const updated = { ...userStatuses, [revisionQuestion._serial]: 'revision' };
-      setUserStatuses(updated);
-      localStorage.setItem(statusStorageKey, JSON.stringify(updated));
-      window.dispatchEvent(new Event('question-status-updated'));
-      window.dispatchEvent(new Event('revision-updated'));
-      setRevisionQuestion(null);
-      toast('Added to revision schedule 🧐', { icon: '🧐', duration: 1800 });
-    } catch (error) {
-      console.error('Error saving revision:', error);
-      toast.error(error.response?.data?.message || 'Could not save revision');
-    } finally {
-      setSavingRevision(false);
     }
   };
 
   // Fetch all books metadata
   useEffect(() => {
     const fetchBooks = async () => {
+      if (userCache.books) {
+        setBooks(userCache.books);
+        setLoading(false);
+        if (userCache.books.length > 0 && !selectedBookId) {
+          setSelectedBookId(userCache.books[0].id);
+        }
+        return;
+      }
       try {
         setLoading(true);
         const res = await api.get('/questions/books');
-        setBooks(res.data || []);
-        if (res.data && res.data.length > 0 && !selectedBookId) {
-          setSelectedBookId(res.data[0].id);
+        const nextBooks = res.data || [];
+        setBooks(nextBooks);
+        setCachedBooks(nextBooks);
+        if (nextBooks.length > 0 && !selectedBookId) {
+          setSelectedBookId(nextBooks[0].id);
         }
       } catch (err) {
         console.error('Error fetching books:', err);
@@ -195,16 +243,23 @@ const QuestionsList = () => {
       }
     };
     fetchBooks();
-  }, []);
+  }, [userId, userCache.books, setCachedBooks]);
 
   // Fetch selected book hierarchy data
   useEffect(() => {
     if (!selectedBookId) return;
+    const cachedBookData = userCache.bookData[selectedBookId];
+    if (cachedBookData) {
+      setBookData(cachedBookData);
+      setBookLoading(false);
+      return;
+    }
     const fetchBookHierarchy = async () => {
       try {
         setBookLoading(true);
         const res = await api.get(`/questions/book/${selectedBookId}`);
         setBookData(res.data);
+        setCachedBookData(selectedBookId, res.data);
         setSelectedChapterName('all');
         setCollapsedSections({});
       } catch (err) {
@@ -215,7 +270,7 @@ const QuestionsList = () => {
       }
     };
     fetchBookHierarchy();
-  }, [selectedBookId]);
+  }, [selectedBookId, userCache.bookData, setCachedBookData]);
 
   // Compute live question status
   const getQuestionStatus = (q) => {
@@ -278,7 +333,10 @@ const QuestionsList = () => {
             return true;
           });
 
-          const solvedCount = filteredQuestions.filter(q => getQuestionStatus(q) === 'solved').length;
+          const solvedCount = filteredQuestions.filter(q => {
+            const status = getQuestionStatus(q);
+            return status === 'solved' || status === 'revision';
+          }).length;
 
           return {
             ...sec,
@@ -312,7 +370,7 @@ const QuestionsList = () => {
         sec.questions.forEach(q => {
           total++;
           const st = getQuestionStatus(q);
-          if (st === 'solved') solved++;
+          if (st === 'solved' || st === 'revision') solved++;
           if (st === 'revision') revision++;
         });
       });
@@ -321,6 +379,21 @@ const QuestionsList = () => {
     const percent = total > 0 ? Math.round((solved / total) * 100) : 0;
     return { total, solved, revision, percent };
   }, [bookData, userStatuses]);
+
+  const savedSolvedQuestions = useMemo(() => {
+    const uniqueRecords = new Map();
+    Object.values(userCache.questionRecords || {}).forEach((record) => {
+      if (record.status === 'unsolved') return;
+      uniqueRecords.set(`${record.bookId}-${record.serial}`, record);
+    });
+    return [...uniqueRecords.values()].sort((left, right) => new Date(right.solvedAt) - new Date(left.solvedAt));
+  }, [userCache.questionRecords]);
+
+  const solvedDates = useMemo(() => [...new Set(savedSolvedQuestions.map((record) => record.solvedDate).filter(Boolean))].sort().reverse(), [savedSolvedQuestions]);
+  const filteredSolvedQuestions = useMemo(() => savedSolvedQuestions.filter((record) => (
+    (!solvedDateFilter || record.solvedDate === solvedDateFilter)
+    && (!solvedDayFilter || record.dayOfWeek === solvedDayFilter)
+  )), [savedSolvedQuestions, solvedDateFilter, solvedDayFilter]);
 
   // Navigation handlers for chapters
   const currentChapterIndex = useMemo(() => {
@@ -467,6 +540,14 @@ const QuestionsList = () => {
               {currentBookStats.percent}%
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSolvedHistory(true)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+          >
+            <History className="h-4 w-4" />
+            Solved <span className="rounded-full bg-white/80 px-1.5 py-0.5 dark:bg-black/20">{savedSolvedQuestions.length}</span>
+          </button>
         </div>
       </div>
 
@@ -815,6 +896,7 @@ const QuestionsList = () => {
                                             href={q.leetcodeUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
+                                            onClick={() => handleQuestionOpen(q, chapter.name, section.name)}
                                             className={`text-xs font-semibold hover:underline truncate ${
                                               isSolved
                                                 ? 'text-emerald-700 dark:text-emerald-300'
@@ -892,120 +974,66 @@ const QuestionsList = () => {
           </div>
         </div>
       </div>
-      {revisionQuestion && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+      {showSolvedHistory && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-3 sm:p-6" onClick={() => setShowSolvedHistory(false)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="solved-history-title"
+            className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
               <div>
-                <div className="flex items-center gap-2 text-amber-500">
-                  <CalendarClock className="w-5 h-5" />
-                  <span className="text-sm font-semibold">Add to revision</span>
-                </div>
-                <h2 className="mt-2 text-lg font-bold text-gray-900 dark:text-white">{revisionQuestion.title}</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Choose when you want to see this question again.
-                </p>
+                <h2 id="solved-history-title" className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" /> Solved questions
+                </h2>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{filteredSolvedQuestions.length} shown · {savedSolvedQuestions.length} total</p>
               </div>
-              <button onClick={() => setRevisionQuestion(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close revision dialog">
-                <X className="w-5 h-5" />
+              <button type="button" onClick={() => setShowSolvedHistory(false)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" aria-label="Close solved questions">
+                <X className="h-5 w-5" />
               </button>
+            </header>
+
+            <div className="grid grid-cols-1 gap-3 border-b border-gray-200 p-4 sm:grid-cols-[1fr_1fr_auto] dark:border-gray-700">
+              <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 dark:border-gray-700">
+                <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" />
+                <input type="date" value={solvedDateFilter} onChange={(event) => setSolvedDateFilter(event.target.value)} className="min-w-0 flex-1 bg-transparent py-2 text-sm text-gray-800 outline-none dark:text-gray-200" aria-label="Filter by solved date" />
+              </label>
+              <select value={solvedDayFilter} onChange={(event) => setSolvedDayFilter(event.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200" aria-label="Filter by weekday">
+                <option value="">All weekdays</option>
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => <option key={day} value={day}>{day}</option>)}
+              </select>
+              <button type="button" onClick={() => { setSolvedDateFilter(''); setSolvedDayFilter(''); }} className="rounded-lg px-3 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50 dark:text-primary-300 dark:hover:bg-gray-800">Clear filters</button>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Next revision date
-                <input
-                  type="date"
-                  value={revisionDate}
-                  onChange={(event) => setRevisionDate(event.target.value)}
-                  className="input-field mt-2"
-                  required
-                />
-              </label>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Revision time
-                <input
-                  type="time"
-                  value={revisionTime}
-                  onChange={(event) => setRevisionTime(event.target.value)}
-                  className="input-field mt-2"
-                  required
-                />
-              </label>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Repeat after
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {[1, 3, 7, 14, 30].map((days) => (
-                <button
-                  key={days}
-                  type="button"
-                  onClick={() => setRevisionInterval(String(days))}
-                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${
-                    revisionInterval === String(days)
-                      ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                      : 'border-gray-200 text-gray-600 hover:border-primary-300 dark:border-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {days} {days === 1 ? 'day' : 'days'}
-                </button>
-              ))}
-              <label className="rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                Custom days
-                <input
-                  type="number"
-                  min="1"
-                  max="365"
-                  value={revisionInterval}
-                  onChange={(event) => setRevisionInterval(event.target.value)}
-                  className="mt-1 w-full bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white"
-                />
-              </label>
-            </div>
-
-            <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                <input
-                  type="checkbox"
-                  checked={repeatRevision}
-                  onChange={(event) => setRepeatRevision(event.target.checked)}
-                  className="h-4 w-4 accent-primary-600"
-                />
-                Repeat this revision
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
-                Turn off for a one-time revision.
-              </p>
-              {repeatRevision && (
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">
-                  Number of repetitions
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    placeholder="Unlimited"
-                    value={revisionRepeatCount}
-                    onChange={(event) => setRevisionRepeatCount(event.target.value)}
-                    className="input-field mt-2"
-                  />
-                  <span className="text-xs font-normal text-gray-500">
-                    Leave blank for unlimited repetitions.
-                  </span>
-                </label>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+              {filteredSolvedQuestions.length ? (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {filteredSolvedQuestions.map((record) => (
+                    <article key={`${record.bookId}-${record.serial}`} className="flex items-center justify-between gap-3 rounded-lg px-2 py-3">
+                      <div className="min-w-0">
+                        <a href={record.url || '#'} target="_blank" rel="noopener noreferrer" className="truncate text-sm font-semibold text-gray-900 hover:text-primary-700 hover:underline dark:text-gray-100 dark:hover:text-primary-300">
+                          {record.title || `Question #${record.questionId}`}
+                        </a>
+                        <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                          {record.bookTitle || record.bookId} · {record.chapter}{record.section ? ` / ${record.section}` : ''}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right text-xs text-gray-500 dark:text-gray-400">
+                        <div className="font-semibold text-gray-700 dark:text-gray-300">{record.dayOfWeek || 'Day unavailable'}</div>
+                        <time dateTime={record.solvedAt}>{record.solvedDate || (record.solvedAt ? new Date(record.solvedAt).toLocaleDateString() : 'Date unavailable')}</time>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  {savedSolvedQuestions.length ? 'No solved questions match these filters.' : 'No solved questions saved yet.'}
+                </div>
               )}
             </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setRevisionQuestion(null)} className="btn-secondary" disabled={savingRevision}>Cancel</button>
-              <button onClick={confirmRevision} className="btn-primary" disabled={savingRevision}>
-                {savingRevision ? 'Saving...' : 'Add to revision'}
-              </button>
-            </div>
-          </div>
+          </section>
         </div>
       )}
     </div>

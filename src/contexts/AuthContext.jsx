@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import api from '../services/api';
+import { useAppStore } from '../store/appStore';
 
 const AuthContext = createContext();
 
@@ -63,6 +64,8 @@ const initialState = {
 
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const setStoreUser = useAppStore((store) => store.setUser);
+  const clearStoreUser = useAppStore((store) => store.clearUser);
 
   // Check for existing token on app load
   useEffect(() => {
@@ -77,6 +80,7 @@ export const AuthProvider = ({ children }) => {
           type: 'LOGIN_SUCCESS',
           payload: { user: parsedUser, token },
         });
+        setStoreUser(parsedUser.id || parsedUser._id);
 
         const response = await api.get('/user/profile');
         const freshUser = response.data.user;
@@ -114,6 +118,7 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      setStoreUser(user.id || user._id);
       
       dispatch({
         type: 'LOGIN_SUCCESS',
@@ -132,6 +137,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const googleLogin = async (credential) => {
+    dispatch({ type: 'LOGIN_START' });
+    try {
+      const response = await api.post('/auth/google', { credential });
+      const { user, token } = response.data;
+
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setStoreUser(user.id || user._id);
+
+      dispatch({
+        type: 'LOGIN_SUCCESS',
+        payload: { user, token },
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Google authentication failed';
+      dispatch({
+        type: 'LOGIN_FAILURE',
+        payload: errorMessage,
+      });
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const register = async (name, email, password) => {
     dispatch({ type: 'LOGIN_START' });
     try {
@@ -141,6 +172,7 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      setStoreUser(user.id || user._id);
       
       dispatch({
         type: 'LOGIN_SUCCESS',
@@ -166,6 +198,7 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      setStoreUser(user.id || user._id);
       
       dispatch({
         type: 'LOGIN_SUCCESS',
@@ -196,6 +229,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    clearStoreUser();
     dispatch({ type: 'LOGOUT' });
   };
 
@@ -215,6 +249,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     ...state,
     login,
+    googleLogin,
     register,
     verifyOTP,
     resendOTP,

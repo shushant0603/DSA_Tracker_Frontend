@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Eye, EyeOff, Code2, ArrowRight, Check } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
+import { useTheme } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 const Register = () => {
@@ -14,7 +16,8 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register, isAuthenticated, error, clearError } = useAuth();
+  const { register, googleLogin, isAuthenticated, error, clearError } = useAuth();
+  const { darkMode } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,6 +63,28 @@ const Register = () => {
       });
       navigate('/app/dashboard');
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    if (!credentialResponse?.credential) {
+      toast.error('Google credential not found');
+      return;
+    }
+    setIsLoading(true);
+    const result = await googleLogin(credentialResponse.credential);
+    setIsLoading(false);
+
+    if (result.success) {
+      toast.success('Account created / logged in with Google!', {
+        position: 'top-center',
+        icon: '🎉',
+      });
+      navigate('/app/dashboard');
+    }
+  };
+
+  const handleGoogleError = () => {
+    toast.error('Google sign-in was unsuccessful. Please try again.');
   };
 
   // Password strength indicator
@@ -281,6 +306,29 @@ const Register = () => {
               )}
             </button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-3 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+                Or sign up with
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-center w-full">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              useOneTap
+              theme={darkMode ? 'filled_black' : 'outline'}
+              shape="rectangular"
+              text="signup_with"
+              width="100%"
+            />
+          </div>
 
           <p className="text-center text-xs text-gray-500 dark:text-gray-400">
             By creating an account, you agree to our Terms of Service and Privacy Policy

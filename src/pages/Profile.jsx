@@ -22,6 +22,7 @@ import api from '../services/api';
 import { updatePlatformUsernames, getPlatformStats } from '../services/platform/platform';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { useAppStore } from '../store/appStore';
 
 // LeetCode Icon Component
 const LeetCodeIcon = ({ className }) => (
@@ -40,6 +41,7 @@ const CodeforcesIcon = ({ className }) => (
 const Profile = () => {
   const { user, updateUser, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
+  const { userCache, setPlatformStats, invalidatePlatformStats } = useAppStore();
   const [loading, setLoading] = useState(false);
   const [platformLoading, setPlatformLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
@@ -90,10 +92,24 @@ const Profile = () => {
     }
   };
 
-  const fetchPlatformData = async () => {
+  const fetchPlatformData = async (force = false) => {
     try {
+      const cacheIsFresh = !force && userCache.platformStats &&
+        Date.now() - userCache.platformStatsFetchedAt < 5 * 60 * 1000;
+      if (cacheIsFresh) {
+        setPlatformData(userCache.platformStats);
+        if (userCache.platformStats.platformUsernames) {
+          setPlatformUsernames({
+            github: userCache.platformStats.platformUsernames.github || '',
+            leetcode: userCache.platformStats.platformUsernames.leetcode || '',
+            codeforces: userCache.platformStats.platformUsernames.codeforces || ''
+          });
+        }
+        return;
+      }
       const response = await getPlatformStats();
       setPlatformData(response.data);
+      setPlatformStats(response.data);
       if (response.data.platformUsernames) {
         setPlatformUsernames({
           github: response.data.platformUsernames.github || '',
@@ -134,7 +150,8 @@ const Profile = () => {
 
       await updatePlatformUsernames(dataToUpdate);
       toast.success('Platform usernames updated!');
-      fetchPlatformData();
+      invalidatePlatformStats();
+      fetchPlatformData(true);
     } catch (error) {
       if (error.response?.data?.validationResults) {
         Object.entries(error.response.data.validationResults).forEach(([platform, result]) => {

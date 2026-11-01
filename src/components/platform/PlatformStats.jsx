@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getPlatformStats, savePlatformUsernames } from '../../services/platform/platform';
 import toast from 'react-hot-toast';
+import { useAppStore } from '../../store/appStore';
 
 // LeetCode Icon Component
 const LeetCodeIcon = ({ className }) => (
@@ -441,17 +442,27 @@ const CodeforcesCard = ({ stats }) => {
 
 // Main PlatformStats Component
 const PlatformStats = () => {
+  const { userCache, setPlatformStats } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
+    const cacheIsFresh = !force && userCache.platformStats &&
+      Date.now() - userCache.platformStatsFetchedAt < 5 * 60 * 1000;
+    if (cacheIsFresh) {
+      setData(userCache.platformStats);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
       const response = await getPlatformStats();
       setData(response.data);
+      setPlatformStats(response.data);
     } catch (err) {
       console.error('Error fetching platform stats:', err);
       setError('Failed to fetch platform stats');
@@ -462,7 +473,7 @@ const PlatformStats = () => {
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [userCache.platformStats, userCache.platformStatsFetchedAt]);
 
   const handleUsernameSubmit = async (formData) => {
     try {
@@ -474,7 +485,7 @@ const PlatformStats = () => {
 
       await savePlatformUsernames(submitData);
       toast.success('Platform profiles connected successfully!');
-      fetchStats();
+      fetchStats(true);
     } catch (err) {
       console.error('Error saving usernames:', err);
       if (err.response?.data?.validationResults) {
@@ -514,7 +525,7 @@ const PlatformStats = () => {
           <span>{error}</span>
         </div>
         <button 
-          onClick={fetchStats}
+          onClick={() => fetchStats(true)}
           className="mt-4 btn-secondary"
         >
           Try Again
@@ -549,7 +560,7 @@ const PlatformStats = () => {
           Coding Platforms
         </h2>
         <button 
-          onClick={fetchStats}
+          onClick={() => fetchStats(true)}
           className="btn-ghost text-sm flex items-center gap-1"
         >
           Refresh <ChevronRight className="w-4 h-4" />
